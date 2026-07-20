@@ -267,6 +267,44 @@ async def test_connection_retry_is_bounded_to_idempotent_reads() -> None:
 
 
 @pytest.mark.asyncio
+async def test_read_retries_use_bounded_exponential_backoff() -> None:
+    calls = 0
+    delays: list[float] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise httpx.ConnectError("connection reset", request=request)
+        return httpx.Response(200, json={"errcode": 0, "data": {}})
+
+    async def record_sleep(delay: float) -> None:
+        delays.append(delay)
+
+    signer = SpySignatureService(signed_from)
+    client = PupuHttpClient(
+        base_url="https://j1.pupuapi.com",
+        signature_service=signer,
+        app_version="6.4.5",
+        os_type="Android",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        timestamp_ms=lambda: 1_753_036_200_000,
+        max_read_attempts=3,
+        retry_backoff_seconds=0.25,
+        sleep=record_sleep,
+    )
+
+    await client.request(
+        "GET",
+        "/client/base/data",
+        signature_requirement=SignatureRequirement.PUBLIC,
+    )
+    await client.aclose()
+
+    assert delays == [0.25, 0.5]
+
+
+@pytest.mark.asyncio
 async def test_errors_never_include_sensitive_response_or_headers() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(

@@ -1,5 +1,6 @@
+import asyncio
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 import httpx
@@ -35,6 +36,8 @@ class PupuHttpClient:
         http_client: httpx.AsyncClient | None = None,
         timestamp_ms: Callable[[], int],
         max_read_attempts: int = 2,
+        retry_backoff_seconds: float = 0.25,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         device_id: str | None = None,
         user_id: str | None = None,
         su_id: str | None = None,
@@ -44,6 +47,8 @@ class PupuHttpClient:
     ) -> None:
         if max_read_attempts < 1:
             raise ValueError("max_read_attempts must be at least one")
+        if retry_backoff_seconds < 0:
+            raise ValueError("retry_backoff_seconds cannot be negative")
         self._base_url = base_url.rstrip("/")
         self._signature_service = signature_service
         self._app_version = app_version
@@ -51,6 +56,8 @@ class PupuHttpClient:
         self._http_client = http_client or httpx.AsyncClient()
         self._timestamp_ms = timestamp_ms
         self._max_read_attempts = max_read_attempts
+        self._retry_backoff_seconds = retry_backoff_seconds
+        self._sleep = sleep
         self._identity = {
             "device_id": device_id,
             "user_id": user_id,
@@ -136,16 +143,21 @@ class PupuHttpClient:
                 )
             except httpx.TimeoutException as error:
                 if attempt < attempts:
+                    await self._sleep(self._retry_delay(attempt))
                     continue
                 raise PupuTimeoutError("Pupu request timed out") from error
             except httpx.TransportError as error:
                 if attempt < attempts:
+                    await self._sleep(self._retry_delay(attempt))
                     continue
                 message = str(error).lower()
                 if "tls" in message or "ssl" in message:
                     raise PupuTlsError("Pupu TLS negotiation failed") from error
                 raise PupuNetworkError("Pupu network request failed") from error
         raise AssertionError("unreachable")
+
+    def _retry_delay(self, failed_attempt: int) -> float:
+        return min(self._retry_backoff_seconds * 2 ** (failed_attempt - 1), 5.0)
 
     async def aclose(self) -> None:
         await self._http_client.aclose()
