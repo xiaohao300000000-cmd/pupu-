@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,3 +21,10 @@ class Settings(BaseSettings):
     pupu_allow_live_mutation: bool = False
     pupu_app_version: str = "6.4.5"
     pupu_os_type: str = "Android"
+
+    llm_provider: str = "deepseek"
+    llm_base_url: str = "https://api.deepseek.com"
+    llm_api_key: SecretStr | None = None
+    llm_model: str = "deepseek-v4-flash"
+    llm_timeout_seconds: float = Field(default=60.0, gt=0)
+    llm_max_tool_rounds: int = Field(default=6, ge=1, le=20)
