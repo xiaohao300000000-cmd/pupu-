@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -6,6 +7,11 @@ from pydantic import BaseModel, ConfigDict, field_validator
 class SignatureMode(StrEnum):
     NONE = "none"
     SEAL_SIGN = "seal_sign"
+
+
+class SignatureRequirement(StrEnum):
+    PUBLIC = "public"
+    PROTECTED = "protected"
 
 
 class PupuRequestContext(BaseModel):
@@ -48,3 +54,12 @@ class SignedPupuRequest(BaseModel):
     headers: dict[str, str]
     signature_mode: SignatureMode
     metadata: dict[str, str]
+
+
+class PupuResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    status_code: int
+    errcode: int | str | None
+    data: Any
+    payload: Any
