@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "inspected_at": "2026-07-20T19:09:57Z",
+  "repositories": [
+    {
+      "repository": "cddjr/check",
+      "repository_url": "https://github.com/cddjr/check",
+      "inspected_sha": "a7da0d90a55a0b345b70dde1549591a69e2cd417",
+      "inspected_at": "2026-07-20T19:09:57Z",
+      "license": "MIT; README also states a non-commercial research restriction",
+      "pupu_files": [
+        "pupu_api.py",
+        "pupu_types.py",
+        "ck_pupu_buy.py",
+        "ck_pupu_collectcards.py",
+        "ck_pupu_coupon.py",
+        "ck_pupu_history.py",
+        "ck_pupu_lottery.py",
+        "ck_pupu_sign.py"
+      ],
+      "seal_result": "partial",
+      "sign_result": "partial",
+      "cart_result": "absent",
+      "notes": "No generator exists in source. Issue 3 contains only an author's partial textual description. The repository has direct order creation but no cart read or mutation implementation."
+    },
+    {
+      "repository": "YDEKQ/check",
+      "repository_url": "https://github.com/YDEKQ/check",
+      "inspected_sha": "8bfb8cd12fe2b8988c35bfbdbdc030f7f357407a",
+      "inspected_at": "2026-07-20T19:09:57Z",
+      "license": "MIT inherited from fork",
+      "pupu_files": [
+        "pupu_api.py",
+        "pupu_types.py",
+        "ck_pupu_buy.py",
+        "ck_pupu_collectcards.py",
+        "ck_pupu_coupon.py",
+        "ck_pupu_history.py",
+        "ck_pupu_lottery.py",
+        "ck_pupu_sign.py"
+      ],
+      "seal_result": "absent",
+      "sign_result": "absent",
+      "cart_result": "absent",
+      "notes": "Fork is five commits behind cddjr/check and zero commits ahead."
+    },
+    {
+      "repository": "jo-dean/check",
+      "repository_url": "https://github.com/jo-dean/check",
+      "inspected_sha": "66d4d27c715362b89cb6c96bfb27d65277b5aa13",
+      "inspected_at": "2026-07-20T19:09:57Z",
+      "license": "MIT inherited from fork",
+      "pupu_files": [
+        "pupu_api.py",
+        "pupu_types.py",
+        "dailycheckin_scripts/ck_pupu_buy.py",
+        "dailycheckin_scripts/ck_pupu_collectcards.py",
+        "dailycheckin_scripts/ck_pupu_coupon.py",
+        "dailycheckin_scripts/ck_pupu_history.py",
+        "dailycheckin_scripts/ck_pupu_lottery.py",
+        "dailycheckin_scripts/ck_pupu_sign.py"
+      ],
+      "seal_result": "absent",
+      "sign_result": "absent",
+      "cart_result": "absent",
+      "notes": "Fork is twenty-five commits behind cddjr/check and zero commits ahead."
+    },
+    {
+      "repository": "CHERWING/CHERWIN_SCRIPTS",
+      "repository_url": "https://github.com/CHERWING/CHERWIN_SCRIPTS",
+      "inspected_sha": "06468e0e46e9aea0c5b45b054bff6afe2c0624dd",
+      "inspected_at": "2026-07-20T19:09:57Z",
+      "license": "NOASSERTION; no repository license detected",
+      "pupu_files": [
+        "PPCS.py"
+      ],
+      "seal_result": "absent",
+      "sign_result": "absent",
+      "cart_result": "absent",
+      "notes": "Implements token refresh, nearby store lookup, and activity/check-in calls. Methods named sign refer to daily check-in, not request signing."
+    },
+    {
+      "repository": "fghwett/pupu",
+      "repository_url": "https://github.com/fghwett/pupu",
+      "inspected_sha": "1731c117f142a22faf82c0a6d37876ec2e8df1ce",
+      "inspected_at": "2026-07-20T19:09:57Z",
+      "license": "MIT",
+      "pupu_files": [
+        "task/task.go",
+        "task/model.go",
+        "util/http.go"
+      ],
+      "seal_result": "absent",
+      "sign_result": "absent",
+      "cart_result": "absent",
+      "notes": "Implements token refresh, daily check-in, coin, and coupon-list calls. signTask is a daily check-in task, not request signing."
+    },
+    {
+      "repository": "Churroser/PupuTool",
+      "repository_url": "https://github.com/Churroser/PupuTool",
+      "inspected_sha": "e028c793c62446fd94942afc47c0409fc7f88c92",
+      "inspected_at": "2026-07-20T19:09:57Z",
+      "license": "NOASSERTION; no repository license detected",
+      "pupu_files": [
+        "Program.cs",
+        "JsonExtensions.cs"
+      ],
+      "seal_result": "absent",
+      "sign_result": "absent",
+      "cart_result": "absent",
+      "notes": "Implements token refresh and daily sign/share calls. Sign methods are activity calls, not request signing."
+    }
+  ]
+}
