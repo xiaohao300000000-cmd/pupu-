@@ -2,7 +2,7 @@
 
 这是一个正在开发的 Python 模块化单体项目：由 DeepSeek 理解用户的采购或菜品需求，通过受控工具查询朴朴真实商品，组建助手购物车，并在用户确认后安全同步到真实购物车。
 
-> 当前状态：开发中。公开服务器时间验证脚本已建立，但最近一次真实网络请求失败（PupuNetworkError）；手机号登录、受保护请求签名、真实商品查询和真实购物车加购尚未完成验收。
+> 当前状态：开发中。公开服务器时间验证脚本已建立，但最近一次真实网络请求失败（PupuNetworkError）；`seal/sign` 静态跟进已确认存在请求级线索但仍未恢复完整算法；手机号登录、受保护请求签名、真实商品查询和真实购物车加购尚未完成验收。
 
 ## 当前已实现
 
@@ -94,6 +94,7 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 - [签名与购物车实施计划](docs/superpowers/plans/2026-07-21-pupu-signature-and-cart-control.md)
 - [GitHub 上游审计](docs/research/pupu-signature-audit-2026-07-21.md)
 - [APK 元数据复核](docs/research/apk-metadata-review-2026-07-21.md)
+- [`seal/sign` 静态跟进](docs/research/seal-sign-static-followup-2026-07-21.md)
 - [复核证据表](docs/research/evidence-table-2026-07-21.md)
 - [当前交接说明](HANDOFF.md)
 

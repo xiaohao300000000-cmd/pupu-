@@ -21,6 +21,7 @@
 9. 购物车两阶段控制：预览哈希、过期、精确短语、一次性消费、幂等键、超时后回读判定。
 10. Windows 兼容性修复：`ConfirmationStore` 改为跨平台文件锁，避免 `fcntl` 导致测试收集失败。
 11. APK 复核文档：两份 APK 元数据已核验，但 `seal/sign` 完整实现仍未得到。
+12. `seal/sign` 静态跟进：确认 Hermes `encryptionToParams` 只是业务参数 MD5 摘要；`withSecSign` 会透传到 native request config；payload 中存在 `HEADER_SEAL/HEADER_SIGN`、`seal-v2/v3`、`sign-v2/v3`、`pp-seqid/pp-time` 等线索，但仍缺完整算法和固定向量。
 
 ## 真实验证边界
 
@@ -59,11 +60,12 @@ py -3.12 scripts/validate_pupu_public.py
 - `docs/research/pupu-signature-audit-2026-07-21.md`
 - `docs/research/apk-metadata-review-2026-07-21.md`
 - `docs/research/evidence-table-2026-07-21.md`
+- `docs/research/seal-sign-static-followup-2026-07-21.md`
 - `docs/research/upstreams.json`
 
 ## 下一步
 
-1. 继续 native / Hermes 层定位 `ppAppSecret`、`ppOs` 与最终 `seal/sign` 输出格式。
+1. 继续 native / Hermes 层定位 `ppAppSecret`、`ppOs` 与最终 `seal/sign` 输出格式；优先从运行时 dump 壳后 DEX/classes，找包含 `HEADER_SEAL`、`HEADER_SIGN`、`force_ctrl_seal_v3`、`trackSealInfo` 的类。
 2. 拿到一个 GET 向量和一个 POST 向量后，先写固定向量测试，再实现签名模块。
 3. 受保护请求签名得到真实向量验证后，再实现门店、商品和购物车 Gateway。
 4. 使用低风险单个商品执行 `preview → confirmation → execute → readback`。
