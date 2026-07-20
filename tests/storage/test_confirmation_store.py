@@ -1,3 +1,4 @@
+import os
 import stat
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -43,7 +44,9 @@ def test_confirmation_file_is_private_and_confirmation_is_one_time(tmp_path) -> 
     store = ConfirmationStore(path)
     store.put(preview())
 
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
     consumed = store.consume(
         "confirm-1",
         phrase="确认同步到朴朴购物车",

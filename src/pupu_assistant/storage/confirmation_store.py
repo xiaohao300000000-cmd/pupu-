@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import tempfile
@@ -12,6 +11,25 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from pupu_assistant.domain.cart_write import CONFIRMATION_PHRASE, CartPreview
+
+if os.name == "nt":
+    import msvcrt
+
+    def _lock_file(handle: Any) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+
+    def _unlock_file(handle: Any) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _lock_file(handle: Any) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+    def _unlock_file(handle: Any) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 class ConfirmationError(RuntimeError):
@@ -99,11 +117,11 @@ class ConfirmationStore:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock_path.open("a+") as lock_file:
             os.chmod(self._lock_path, 0o600)
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            _lock_file(lock_file)
             try:
                 yield
             finally:
-                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                _unlock_file(lock_file)
 
     def _read_records(self) -> dict[str, StoredConfirmation]:
         if not self._path.exists():
