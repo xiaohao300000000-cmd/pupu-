@@ -1,0 +1,12 @@
+.worktrees/
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+.env
+.local/
+.tools/
+*.apk
+*.xapk
+*.apks
+live-evidence*.json

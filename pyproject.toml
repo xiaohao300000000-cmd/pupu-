@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pupu-assistant"
+version = "0.1.0"
+description = "DeepSeek-centered Pupu grocery assistant"
+requires-python = ">=3.12"
+dependencies = [
+  "httpx>=0.28,<1",
+  "pydantic>=2.11,<3",
+  "pydantic-settings>=2.10,<3",
+  "typer>=0.16,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4,<10",
+  "pytest-asyncio>=1.1,<2",
+  "respx>=0.22,<1",
+  "ruff>=0.12,<1",
+]
+
+[project.scripts]
+pupu = "pupu_assistant.entrypoints.cli.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pupu_assistant"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
