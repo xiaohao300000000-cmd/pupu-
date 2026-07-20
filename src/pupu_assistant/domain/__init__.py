@@ -1,0 +1,1 @@
+"""Core purchase-domain models."""
