@@ -123,6 +123,13 @@ class FeishuPurchaseHandler:
                     if revised.changed
                     else "助手购物车没有变化。"
                 )
+                if revised.session.state_machine.state is PurchaseState.CANCELLED:
+                    return FeishuHandlerResult(
+                        event_id=message.event_id,
+                        task_id=revised.session.task_id,
+                        reply_text=reply_text or "当前采购任务已取消。",
+                        duplicate=False,
+                    )
                 return FeishuHandlerResult(
                     event_id=message.event_id,
                     task_id=revised.session.task_id,

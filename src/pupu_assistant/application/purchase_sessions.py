@@ -30,6 +30,10 @@ class AssistantCartStoreConflict(RuntimeError):
     pass
 
 
+class AssistantCartUndoUnavailable(RuntimeError):
+    pass
+
+
 class PurchaseSessionService:
     """Coordinates recoverable task progress without touching the platform cart."""
 
@@ -169,6 +173,66 @@ class PurchaseSessionService:
             ),
         )
 
+    def undo_last_cart_change(
+        self,
+        *,
+        task_id: str,
+        user_id: str,
+        operation_id: str,
+    ) -> PurchaseSessionSnapshot:
+        snapshot = self.load(task_id=task_id, user_id=user_id)
+        if snapshot.cart is None or snapshot.context.previous_cart is None:
+            raise AssistantCartUndoUnavailable(
+                "No unsynced assistant-cart change is available to undo"
+            )
+        if operation_id in snapshot.cart.applied_operation_ids:
+            return snapshot
+        previous = snapshot.context.previous_cart
+        if previous.store_id != snapshot.cart.store_id:
+            raise AssistantCartUndoUnavailable(
+                "Previous assistant cart belongs to another store"
+            )
+        restored = AssistantCart(
+            store_id=snapshot.cart.store_id,
+            version=snapshot.cart.version + 1,
+            items=previous.items,
+            applied_operation_ids=(
+                *snapshot.cart.applied_operation_ids,
+                operation_id,
+            ),
+        )
+        machine = self._copy_machine(snapshot.state_machine)
+        machine.cart_changed(version=restored.version)
+        context = snapshot.context.model_copy(update={"previous_cart": None})
+        updated = snapshot.model_copy(
+            update={
+                "cart": restored,
+                "state_machine": machine,
+                "context": context,
+            }
+        )
+        self._repository.save(updated)
+        return updated
+
+    def cancel(
+        self,
+        *,
+        task_id: str,
+        user_id: str,
+        action_id: str,
+    ) -> PurchaseSessionSnapshot:
+        snapshot = self.load(task_id=task_id, user_id=user_id)
+        machine = self._copy_machine(snapshot.state_machine)
+        machine.cancel()
+        context = snapshot.context.model_copy(
+            update={"last_card_action_id": action_id}
+        )
+        updated = snapshot.model_copy(
+            update={"state_machine": machine, "context": context}
+        )
+        self._repository.save(updated)
+        return updated
+
     def _change_cart(
         self,
         *,
@@ -186,8 +250,9 @@ class PurchaseSessionService:
             return snapshot
         machine = self._copy_machine(snapshot.state_machine)
         machine.cart_changed(version=cart.version)
+        context = snapshot.context.model_copy(update={"previous_cart": snapshot.cart})
         updated = snapshot.model_copy(
-            update={"cart": cart, "state_machine": machine}
+            update={"cart": cart, "state_machine": machine, "context": context}
         )
         self._repository.save(updated)
         return updated

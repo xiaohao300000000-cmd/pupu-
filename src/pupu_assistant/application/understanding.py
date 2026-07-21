@@ -250,6 +250,7 @@ class PurchaseUnderstandingWorkflow:
             understanding=understanding,
             clarification_history=snapshot.context.clarification_history,
             product_candidates=snapshot.context.product_candidates,
+            previous_cart=snapshot.context.previous_cart,
         )
         machine = replace(snapshot.state_machine)
         if understanding.clarification_question:

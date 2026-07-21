@@ -27,6 +27,7 @@ class PurchaseSessionContext(BaseModel):
     understanding: PurchaseUnderstanding | None = None
     clarification_history: tuple[ClarificationExchange, ...] = ()
     product_candidates: tuple[ProductCandidate, ...] = ()
+    previous_cart: AssistantCart | None = None
 
 
 class PurchaseSessionSnapshot(BaseModel):

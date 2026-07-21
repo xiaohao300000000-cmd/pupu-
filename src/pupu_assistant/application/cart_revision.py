@@ -6,7 +6,10 @@ from dataclasses import dataclass, replace
 from pydantic import BaseModel, ConfigDict, Field
 
 from pupu_assistant.application.orchestrator import PurchaseAgent
-from pupu_assistant.application.purchase_sessions import PurchaseSessionService
+from pupu_assistant.application.purchase_sessions import (
+    AssistantCartUndoUnavailable,
+    PurchaseSessionService,
+)
 from pupu_assistant.application.state_machine import PurchaseState
 from pupu_assistant.application.tool_registry import ToolRegistry, ToolRisk, ToolSpec
 from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
@@ -24,7 +27,9 @@ product, price, stock value, platform identifier, or alternative. A replacement 
 valid only when the tool accepts an already-saved candidate. Apply the user's request
 incrementally; do not rebuild unrelated cart items. If the request only asks to view
 the cart, read it without changing it. If the user asks to sync, order, or pay, do not
-perform that action and explain that the separate confirmation flow is required."""
+perform that action and explain that the separate confirmation flow is required. Use
+assistant_cart.undo only for an explicit request to undo the last unsynced change. Use
+assistant_cart.cancel only for an explicit request to cancel the current task."""
 
 
 class EmptyCartRevisionArguments(BaseModel):
@@ -83,6 +88,7 @@ class _CartRevisionTools:
         self._user_id = snapshot.user_id
         self._request_id = request_id
         self._operation_index = 0
+        self.last_action: str | None = None
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
@@ -122,6 +128,24 @@ class _CartRevisionTools:
                 ),
                 arguments_model=ReplaceCartProductArguments,
                 handler=self._replace,
+                risk=ToolRisk.ASSISTANT_CART,
+            )
+        )
+        registry.register(
+            ToolSpec(
+                name="assistant_cart.undo",
+                description="Undo the most recent unsynced assistant-cart change",
+                arguments_model=EmptyCartRevisionArguments,
+                handler=self._undo,
+                risk=ToolRisk.ASSISTANT_CART,
+            )
+        )
+        registry.register(
+            ToolSpec(
+                name="assistant_cart.cancel",
+                description="Cancel the current local purchase task",
+                arguments_model=EmptyCartRevisionArguments,
+                handler=self._cancel,
                 risk=ToolRisk.ASSISTANT_CART,
             )
         )
@@ -183,6 +207,25 @@ class _CartRevisionTools:
             operation_id=self._operation_id("replace"),
         ).cart
 
+    def _undo(self, arguments: EmptyCartRevisionArguments):
+        del arguments
+        try:
+            return self._sessions.undo_last_cart_change(
+                task_id=self._task_id,
+                user_id=self._user_id,
+                operation_id=self._operation_id("undo"),
+            ).cart
+        except AssistantCartUndoUnavailable as error:
+            raise CartRevisionUnavailable(str(error)) from error
+
+    def _cancel(self, arguments: EmptyCartRevisionArguments):
+        del arguments
+        return self._sessions.cancel(
+            task_id=self._task_id,
+            user_id=self._user_id,
+            action_id=self._operation_id("cancel"),
+        ).state_machine.state.value
+
     def _load(self) -> PurchaseSessionSnapshot:
         return self._sessions.load(task_id=self._task_id, user_id=self._user_id)
 
@@ -197,6 +240,7 @@ class _CartRevisionTools:
 
     def _operation_id(self, action: str) -> str:
         self._operation_index += 1
+        self.last_action = action
         return f"{self._request_id}:{self._operation_index}:{action}"
 
 
@@ -230,11 +274,13 @@ class CartRevisionWorkflow:
         if snapshot.cart is None:
             raise CartRevisionUnavailable("purchase task has no assistant cart")
         original_version = snapshot.cart.version
-        tools = _CartRevisionTools(
+        original_cart = snapshot.cart
+        revision_tools = _CartRevisionTools(
             sessions=self._sessions,
             snapshot=snapshot,
             request_id=request_id,
-        ).build_registry()
+        )
+        tools = revision_tools.build_registry()
         agent = PurchaseAgent(
             provider=self._provider,
             tools=tools,
@@ -257,18 +303,27 @@ class CartRevisionWorkflow:
                 "assistant_cart.set_quantity",
                 "assistant_cart.remove",
                 "assistant_cart.replace",
+                "assistant_cart.undo",
+                "assistant_cart.cancel",
             },
         )
         updated = self._sessions.load(task_id=task_id, user_id=user_id)
         changed = updated.cart is not None and updated.cart.version != original_version
-        if changed:
+        if changed and updated.state_machine.state is not PurchaseState.CANCELLED:
             machine = replace(updated.state_machine)
             if updated.cart is not None and updated.cart.items:
                 machine.request_confirmation()
             else:
                 machine.cancel()
             context_snapshot = updated.context.model_copy(
-                update={"last_card_action_id": request_id}
+                update={
+                    "last_card_action_id": request_id,
+                    "previous_cart": (
+                        None
+                        if revision_tools.last_action == "undo"
+                        else original_cart
+                    ),
+                }
             )
             updated = updated.model_copy(
                 update={"state_machine": machine, "context": context_snapshot}
