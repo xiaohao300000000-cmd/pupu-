@@ -109,4 +109,5 @@ py -3.12 scripts/validate_pupu_public.py
 - Added `src/pupu_assistant/integrations/pupu/hook_capture.py` and tests for hook event normalization, signature-header extraction, cache upsert, and redaction.
 - Current local device state is an x86_64 emulator, not a physical arm64 device; live hook capture has not produced signed request vectors yet.
 - Follow-up emulator test: `codex-pupu-api35` boots and can install a patched/re-signed APK. Original APK crashes looking for missing `libDexHelper-x86.so`; patched wrapper loads `libDexHelper.so` from arm64 but then hits native `SIGSEGV` under the x86_64 emulator's arm64 bridge. The configured arm64 AVD did not come online within a three-minute local boot window.
+- Added native-only early DEX dump tooling (`scripts/frida/pupu_dex_dump.js`, `scripts/dump_pupu_dex.py`). First x86_64 emulator run produced no DEX dump because the app crashed after the `initial_250ms` scan; next step is lower-level native hooks around mmap/memcpy/DexFileLoader.
 - Details: `docs/research/pupu-frida-hook-capture-2026-07-22.md`.

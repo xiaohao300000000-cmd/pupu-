@@ -133,3 +133,11 @@ python scripts/capture_pupu_signatures.py
 ```
 
 This requires a connected Android device/emulator with Frida available. It writes redacted events to `.local/evidence/` and private signed-header cache entries to `.local/private/`, both ignored by Git.
+
+Early DEX dump mode:
+
+```bash
+python scripts/dump_pupu_dex.py --duration 8
+```
+
+This is for SecNeo/native-loader follow-up on an emulator or ARM runtime. Dumps are written only under ignored `.local/evidence/dex-dumps/`.

@@ -18,6 +18,11 @@ This is the dynamic route for recovering usable `seal/sign` evidence when static
   - writes redacted event logs to `.local/evidence/pupu-frida-events.redacted.jsonl`;
   - writes exact-match signed-header cache entries to `.local/private/pupusgn-signature-cache.json`;
   - stdout prints only count, fingerprint, and file path; it does not print real `seal/sign` values.
+- `scripts/frida/pupu_dex_dump.js` and `scripts/dump_pupu_dex.py`
+  - native-only early Frida script;
+  - does not require `Java.perform()`;
+  - scans readable memory for DEX/CDex magic;
+  - writes dumps only to ignored `.local/evidence/dex-dumps/`.
 - `src/pupu_assistant/integrations/pupu/hook_capture.py`
   - normalizes hook events;
   - extracts signed headers;
@@ -96,9 +101,25 @@ Results:
 5. The patched APK gets past the missing-x86-library failure and loads `/lib/arm64/libDexHelper.so`.
 6. It then hits native `SIGSEGV` inside/after `libDexHelper.so` initialization under the x86_64 emulator's arm64 native bridge.
 7. The `codex-pupu-api35-arm64` AVD did not come online in the local Windows emulator within a three-minute boot window.
+8. A native-only early DEX memory dump script was added and tested against the patched x86_64 emulator run.
+   - Result: no DEX dump yet.
+   - Evidence: script reached `initial_250ms` scan, then the app exited/crashed before later scans.
+   - Interpretation: for this x86_64/native-bridge path, the next hook point needs to move lower into native allocation/copy/mmap or SecNeo loader internals rather than relying on post-load DEX magic scanning.
 
 Current interpretation:
 
 - physical phone is not the only route;
 - x86_64 emulator route is partially working but blocked by SecNeo/native-bridge crash;
 - a real arm64 Android runtime remains the most reliable dynamic route: phone, working arm64 emulator, WSA/third-party emulator with ARM support, or cloud device.
+
+Other non-phone paths still open:
+
+1. Install/use an ARM-capable Android runtime on this PC:
+   - WSA if available;
+   - BlueStacks/MuMu/LDPlayer/Nox with ARM translation;
+   - Genymotion/cloud ARM device.
+2. Continue static SecNeo unpacking from `classes.dex` `dexdata0`/`fdex`.
+3. Continue native-assisted dump:
+   - hook `mmap`, `mprotect`, `memcpy`, `openat/read`, and DexFile loader entry points;
+   - instrument `libDexHelper.so` before the crashing basic block;
+   - dump candidate buffers before they are registered with ART.
