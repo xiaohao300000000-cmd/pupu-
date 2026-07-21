@@ -20,11 +20,13 @@
 - 稳定的 `PupuConnector` 只读商品接口与按任务绑定的 Agent 工具：模型只能接收 Connector 返回并复核过门店归属的商品事实，不能自行构造价格、库存或平台商品 ID。
 - 可恢复的需求理解流程：把自然语言保存为平台无关的结构化采购需求；信息不足时每轮只允许一个关键问题，用户回答后恢复同一任务继续理解。
 - 最小采购编排：按状态机依次获取当前门店、为每条需求搜索并持久化真实候选、让 Agent 只从候选中选择、写入独立助手购物车并进入等待确认。
+- 飞书应用层边界：解析 `lark-cli` 已展平的文本消息与卡片回调事件，按 `event_id` 去重，并把同一用户的追问回答恢复到原采购任务。
 
 > SQLite 持久化代码已实现，但按本轮用户指令未运行新增测试；上面的 `62 passed` 是持久化改动之前的基线，不代表本轮改动已经验证。
 > `PupuConnector` 当前只有稳定接口与工具绑定，尚没有可用的真实受保护接口实现；不能据此声称商品查询已跑通。
 > 需求理解流程已编码，但本轮按用户要求没有执行测试，也未使用真实 DeepSeek API Key 验证。
 > 最小采购编排没有真实 Connector 时会明确停止，不会用 Mock 或模型输出补造商品。
+> 飞书代码只定义新应用专用配置与事件处理；当前没有创建、修改或复用任何现有飞书应用，也没有发送消息或卡片。
 
 ## 架构边界
 
@@ -76,6 +78,9 @@ py -3.12 -m pytest -q
 PUPU_VERIFY_TLS=true
 PUPU_ALLOW_LIVE_MUTATION=false
 PUPU_DATABASE_PATH=.local/pupu-assistant.db
+FEISHU_APP_INSTANCE_NAME=
+FEISHU_APP_ID=
+FEISHU_APP_SECRET=
 LLM_PROVIDER=deepseek
 LLM_BASE_URL=https://api.deepseek.com
 LLM_MODEL=deepseek-v4-flash

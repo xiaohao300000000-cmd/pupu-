@@ -8,7 +8,19 @@ from pydantic import BaseModel, ConfigDict, Field
 from pupu_assistant.domain.assistant_cart.models import ProductSnapshot
 
 
-class PupuConnectorContractViolation(RuntimeError):
+class PupuConnectorError(RuntimeError):
+    pass
+
+
+class PupuConnectorContractViolation(PupuConnectorError):
+    pass
+
+
+class PupuConnectorUnavailable(PupuConnectorError):
+    pass
+
+
+class PupuConnectorAuthenticationRequired(PupuConnectorError):
     pass
 
 

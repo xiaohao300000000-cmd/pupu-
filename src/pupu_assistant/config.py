@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     pupu_app_version: str = "6.4.5"
     pupu_os_type: str = "Android"
 
+    feishu_app_instance_name: str | None = None
+    feishu_app_id: str | None = None
+    feishu_app_secret: SecretStr | None = None
+    feishu_verification_token: SecretStr | None = None
+    feishu_encrypt_key: SecretStr | None = None
+
     llm_provider: str = "deepseek"
     llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: SecretStr | None = None

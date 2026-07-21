@@ -19,6 +19,8 @@ class PurchaseSessionRepository(Protocol):
 
     def load(self, *, task_id: str, user_id: str) -> PurchaseSessionSnapshot: ...
 
+    def load_latest_active(self, *, user_id: str) -> PurchaseSessionSnapshot | None: ...
+
 
 class AssistantCartUnavailable(RuntimeError):
     pass
@@ -53,6 +55,9 @@ class PurchaseSessionService:
 
     def load(self, *, task_id: str, user_id: str) -> PurchaseSessionSnapshot:
         return self._repository.load(task_id=task_id, user_id=user_id)
+
+    def load_latest_active(self, *, user_id: str) -> PurchaseSessionSnapshot | None:
+        return self._repository.load_latest_active(user_id=user_id)
 
     def save_progress(
         self, snapshot: PurchaseSessionSnapshot

@@ -205,34 +205,54 @@ class SqlAlchemyPurchaseSessionRepository:
                 raise PurchaseSessionNotFound(
                     f"Purchase session was not found: {task_id}"
                 )
-            items = tuple(self._domain_item(item) for item in record.items)
-            cart = (
-                AssistantCart(
-                    store_id=record.store_id,
-                    version=record.cart_version,
-                    items=items,
-                    applied_operation_ids=tuple(
-                        json.loads(record.applied_operation_ids_json)
-                    ),
+            return self._snapshot(record)
+
+    def load_latest_active(self, *, user_id: str) -> PurchaseSessionSnapshot | None:
+        terminal_states = {
+            PurchaseState.COMPLETED.value,
+            PurchaseState.PARTIAL_FAILED.value,
+            PurchaseState.FAILED.value,
+            PurchaseState.CANCELLED.value,
+        }
+        with self._session_factory() as session:
+            record = session.scalar(
+                select(PurchaseSessionRecord)
+                .where(
+                    PurchaseSessionRecord.user_id == user_id,
+                    PurchaseSessionRecord.state.not_in(terminal_states),
                 )
-                if record.store_id is not None
-                else None
+                .order_by(PurchaseSessionRecord.updated_at.desc())
+                .limit(1)
             )
-            state_machine = PurchaseStateMachine(
-                state=PurchaseState(record.state),
-                cart_version=record.cart_version,
-                confirmation_id=record.confirmation_id,
-                confirmed_cart_version=record.confirmed_cart_version,
-            )
-            return PurchaseSessionSnapshot(
-                task_id=record.task_id,
-                user_id=record.user_id,
-                context=PurchaseSessionContext.model_validate_json(
-                    record.context_json
+            return self._snapshot(record) if record is not None else None
+
+    def _snapshot(self, record: PurchaseSessionRecord) -> PurchaseSessionSnapshot:
+        items = tuple(self._domain_item(item) for item in record.items)
+        cart = (
+            AssistantCart(
+                store_id=record.store_id,
+                version=record.cart_version,
+                items=items,
+                applied_operation_ids=tuple(
+                    json.loads(record.applied_operation_ids_json)
                 ),
-                state_machine=state_machine,
-                cart=cart,
             )
+            if record.store_id is not None
+            else None
+        )
+        state_machine = PurchaseStateMachine(
+            state=PurchaseState(record.state),
+            cart_version=record.cart_version,
+            confirmation_id=record.confirmation_id,
+            confirmed_cart_version=record.confirmed_cart_version,
+        )
+        return PurchaseSessionSnapshot(
+            task_id=record.task_id,
+            user_id=record.user_id,
+            context=PurchaseSessionContext.model_validate_json(record.context_json),
+            state_machine=state_machine,
+            cart=cart,
+        )
 
     def close(self) -> None:
         self._engine.dispose()
