@@ -9,6 +9,7 @@ from pupu_assistant.application.tool_registry import (
     ToolSpec,
 )
 from pupu_assistant.domain.assistant_cart.models import ProductSnapshot
+from pupu_assistant.domain.purchase.requirements import ProductCandidate
 from pupu_assistant.integrations.pupu.connector import (
     PupuConnector,
     PupuConnectorContractViolation,
@@ -22,6 +23,7 @@ class EmptyArguments(BaseModel):
 class SearchProductsArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    requirement_id: str = Field(min_length=1)
     query: str = Field(min_length=1)
     store_id: str = Field(min_length=1)
     max_results: int = Field(default=3, ge=1, le=3)
@@ -172,6 +174,34 @@ class PurchaseToolset:
             self._verified_product(product, store_id=arguments.store_id)
             for product in products
         ]
+        snapshot = self._sessions.load(
+            task_id=self._task_id,
+            user_id=self._user_id,
+        )
+        retained = tuple(
+            candidate
+            for candidate in snapshot.context.product_candidates
+            if candidate.requirement_id != arguments.requirement_id
+        )
+        context = snapshot.context.model_copy(
+            update={
+                "product_candidates": (
+                    *retained,
+                    *(
+                        ProductCandidate(
+                            requirement_id=arguments.requirement_id,
+                            product=product,
+                        )
+                        for product in verified[: arguments.max_results]
+                    ),
+                )
+            }
+        )
+        self._sessions.update_context(
+            task_id=self._task_id,
+            user_id=self._user_id,
+            context=context,
+        )
         return {
             "search_scope": "verified_connector",
             "products": verified[: arguments.max_results],

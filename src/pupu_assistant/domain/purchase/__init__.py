@@ -6,6 +6,7 @@ from pupu_assistant.domain.purchase.session import (
 )
 from pupu_assistant.domain.purchase.requirements import (
     ClarificationExchange,
+    ProductCandidate,
     PurchaseIntent,
     PurchaseRequirement,
     PurchaseUnderstanding,
@@ -15,6 +16,7 @@ from pupu_assistant.domain.purchase.requirements import (
 __all__ = [
     "ClarificationExchange",
     "PurchaseIntent",
+    "ProductCandidate",
     "PurchaseRequirement",
     "PurchaseSessionContext",
     "PurchaseSessionSnapshot",

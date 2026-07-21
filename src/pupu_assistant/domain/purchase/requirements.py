@@ -5,6 +5,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from pupu_assistant.domain.assistant_cart.models import ProductSnapshot
+
 
 class PurchaseIntent(StrEnum):
     SEARCH_PURCHASE = "search_purchase"
@@ -99,3 +101,12 @@ class ClarificationExchange(BaseModel):
 
     question: str = Field(min_length=1)
     answer: str = Field(min_length=1)
+
+
+class ProductCandidate(BaseModel):
+    """A requirement-to-product match backed by a Connector product fact."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    requirement_id: str = Field(min_length=1)
+    product: ProductSnapshot
