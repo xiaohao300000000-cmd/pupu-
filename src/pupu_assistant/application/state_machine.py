@@ -156,6 +156,20 @@ class PurchaseStateMachine:
             from_states={PurchaseState.VERIFYING},
         )
 
+    def cancel(self) -> None:
+        if self.state in {
+            PurchaseState.COMPLETED,
+            PurchaseState.PARTIAL_FAILED,
+            PurchaseState.FAILED,
+            PurchaseState.CANCELLED,
+        }:
+            raise InvalidPurchaseTransition(
+                f"Cannot cancel while state is {self.state}"
+            )
+        self.confirmation_id = None
+        self.confirmed_cart_version = None
+        self.state = PurchaseState.CANCELLED
+
     def allowed_tools(self) -> set[str]:
         match self.state:
             case PurchaseState.UNDERSTANDING:

@@ -175,6 +175,7 @@ class PurchaseUnderstandingWorkflow:
             last_card_action_id=snapshot.context.last_card_action_id,
             understanding=understanding,
             clarification_history=snapshot.context.clarification_history,
+            product_candidates=snapshot.context.product_candidates,
         )
         machine = replace(snapshot.state_machine)
         if understanding.clarification_question:
