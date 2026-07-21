@@ -86,6 +86,7 @@ class AssistantCartItemRecord(Base):
         primary_key=True,
     )
     product_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    store_product_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     sku_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     name: Mapped[str] = mapped_column(Text, nullable=False)
     specification: Mapped[str] = mapped_column(Text, nullable=False)
@@ -233,6 +234,7 @@ class SqlAlchemyPurchaseSessionRepository:
         return AssistantCartItemRecord(
             task_id=task_id,
             product_id=product.product_id,
+            store_product_id=product.store_product_id,
             sku_id=product.sku_id,
             name=product.name,
             specification=product.specification,
@@ -249,6 +251,7 @@ class SqlAlchemyPurchaseSessionRepository:
         return AssistantCartItem(
             product=ProductSnapshot(
                 product_id=record.product_id,
+                store_product_id=record.store_product_id,
                 sku_id=record.sku_id,
                 name=record.name,
                 specification=record.specification,
