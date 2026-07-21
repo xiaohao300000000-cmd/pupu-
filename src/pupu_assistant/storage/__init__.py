@@ -9,11 +9,15 @@ from pupu_assistant.storage.purchase_session_repository import (
     PurchaseSessionOwnershipConflict,
     SqlAlchemyPurchaseSessionRepository,
 )
+from pupu_assistant.storage.product_catalog_repository import (
+    SqlAlchemyProductCatalogRepository,
+)
 
 __all__ = [
     "PurchaseSessionAlreadyExists",
     "PurchaseSessionNotFound",
     "PurchaseSessionOwnershipConflict",
     "SqlAlchemyHouseholdMemoryRepository",
+    "SqlAlchemyProductCatalogRepository",
     "SqlAlchemyPurchaseSessionRepository",
 ]

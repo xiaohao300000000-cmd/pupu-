@@ -4,7 +4,10 @@ from dataclasses import dataclass, replace
 
 from pupu_assistant.application.orchestrator import PurchaseAgent
 from pupu_assistant.application.purchase_sessions import PurchaseSessionService
-from pupu_assistant.application.purchase_tools import PurchaseToolset
+from pupu_assistant.application.purchase_tools import (
+    ProductFactRecorder,
+    PurchaseToolset,
+)
 from pupu_assistant.application.state_machine import PurchaseState
 from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
 from pupu_assistant.integrations.llm.provider import LLMProvider
@@ -47,11 +50,13 @@ class PurchasePlanningWorkflow:
         connector: PupuConnector,
         sessions: PurchaseSessionService,
         max_tool_rounds: int,
+        product_facts: ProductFactRecorder | None = None,
     ) -> None:
         self._provider = provider
         self._connector = connector
         self._sessions = sessions
         self._max_tool_rounds = max_tool_rounds
+        self._product_facts = product_facts
 
     async def plan(
         self,
@@ -74,6 +79,7 @@ class PurchasePlanningWorkflow:
             sessions=self._sessions,
             task_id=task_id,
             user_id=user_id,
+            product_facts=self._product_facts,
         ).build_registry()
         agent = PurchaseAgent(
             provider=self._provider,

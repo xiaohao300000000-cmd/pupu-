@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Protocol
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from pupu_assistant.application.purchase_sessions import PurchaseSessionService
@@ -61,6 +63,15 @@ class CartReplaceArguments(ProductDetailArguments):
     operation_id: str = Field(min_length=1)
 
 
+class ProductFactRecorder(Protocol):
+    def record_product(
+        self,
+        product: ProductSnapshot,
+        *,
+        image_url: str | None = None,
+    ) -> object: ...
+
+
 class PurchaseToolset:
     """Binds one user's recoverable task to safe Connector and cart tools."""
 
@@ -71,11 +82,13 @@ class PurchaseToolset:
         sessions: PurchaseSessionService,
         task_id: str,
         user_id: str,
+        product_facts: ProductFactRecorder | None = None,
     ) -> None:
         self._connector = connector
         self._sessions = sessions
         self._task_id = task_id
         self._user_id = user_id
+        self._product_facts = product_facts
 
     def build_registry(self) -> ToolRegistry:
         registry = ToolRegistry()
@@ -174,6 +187,8 @@ class PurchaseToolset:
             self._verified_product(product, store_id=arguments.store_id)
             for product in products
         ]
+        for product in verified:
+            self._record_product(product)
         snapshot = self._sessions.load(
             task_id=self._task_id,
             user_id=self._user_id,
@@ -213,11 +228,13 @@ class PurchaseToolset:
             store_id=arguments.store_id,
             store_product_id=arguments.store_product_id,
         )
-        return self._verified_product(
+        verified = self._verified_product(
             product,
             store_id=arguments.store_id,
             store_product_id=arguments.store_product_id,
         )
+        self._record_product(verified)
+        return verified
 
     def _get_cart(self, arguments: EmptyArguments):
         del arguments
@@ -238,6 +255,7 @@ class PurchaseToolset:
             store_id=arguments.store_id,
             store_product_id=arguments.store_product_id,
         )
+        self._record_product(product)
         return self._sessions.add_product(
             task_id=self._task_id,
             user_id=self._user_id,
@@ -274,6 +292,7 @@ class PurchaseToolset:
             store_id=arguments.store_id,
             store_product_id=arguments.store_product_id,
         )
+        self._record_product(replacement)
         return self._sessions.replace_product(
             task_id=self._task_id,
             user_id=self._user_id,
@@ -305,3 +324,7 @@ class PurchaseToolset:
                 "Connector returned a different store product"
             )
         return product
+
+    def _record_product(self, product: ProductSnapshot) -> None:
+        if self._product_facts is not None:
+            self._product_facts.record_product(product)
