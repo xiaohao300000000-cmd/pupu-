@@ -107,5 +107,6 @@ py -3.12 scripts/validate_pupu_public.py
   - redacted event log: `.local/evidence/pupu-frida-events.redacted.jsonl`
   - private exact-match cache: `.local/private/pupusgn-signature-cache.json`
 - Added `src/pupu_assistant/integrations/pupu/hook_capture.py` and tests for hook event normalization, signature-header extraction, cache upsert, and redaction.
-- Current machine check still shows no connected adb device, so live hook capture has not been executed in this session.
+- Current local device state is an x86_64 emulator, not a physical arm64 device; live hook capture has not produced signed request vectors yet.
+- Follow-up emulator test: `codex-pupu-api35` boots and can install a patched/re-signed APK. Original APK crashes looking for missing `libDexHelper-x86.so`; patched wrapper loads `libDexHelper.so` from arm64 but then hits native `SIGSEGV` under the x86_64 emulator's arm64 bridge. The configured arm64 AVD did not come online within a three-minute local boot window.
 - Details: `docs/research/pupu-frida-hook-capture-2026-07-22.md`.

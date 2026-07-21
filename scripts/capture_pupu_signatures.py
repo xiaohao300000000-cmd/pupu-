@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -94,7 +95,8 @@ def run_capture(args: argparse.Namespace) -> int:
     try:
         device = frida.get_usb_device(timeout=args.timeout)
         if args.attach:
-            session = device.attach(args.package)
+            process = device.get_process(args.package)
+            session = device.attach(process.pid)
             pid = None
         else:
             pid = device.spawn([args.package])
@@ -114,7 +116,7 @@ def run_capture(args: argparse.Namespace) -> int:
         )
         return 2
 
-    script = session.create_script(script_source)
+    script = session.create_script(script_source, runtime="v8")
     script.on("message", on_message)
     script.load()
     if pid is not None:
@@ -133,7 +135,10 @@ def run_capture(args: argparse.Namespace) -> int:
         )
     )
     try:
-        sys.stdin.read()
+        if args.duration > 0:
+            time.sleep(args.duration)
+        else:
+            sys.stdin.read()
     except KeyboardInterrupt:
         pass
     finally:
@@ -150,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--events", default=str(DEFAULT_EVENTS))
     parser.add_argument("--cache", default=str(DEFAULT_CACHE))
     parser.add_argument("--timeout", type=int, default=10)
+    parser.add_argument("--duration", type=int, default=0, help="capture seconds; 0 waits on stdin")
     parser.add_argument("--attach", action="store_true", help="attach to a running process")
     return run_capture(parser.parse_args(argv))
 

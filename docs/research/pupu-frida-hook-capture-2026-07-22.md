@@ -42,6 +42,13 @@ If the app is already running:
 py -3.12 scripts/capture_pupu_signatures.py --attach
 ```
 
+For non-interactive emulator runs:
+
+```powershell
+py -3.12 scripts/capture_pupu_signatures.py --duration 30
+py -3.12 scripts/capture_pupu_signatures.py --attach --duration 30
+```
+
 Then exercise a low-risk product detail request in the app. For cart-related captures, use preview/read flows first; avoid writing the real cart until the normal confirmation/readback state machine is connected.
 
 ## Use captured signatures with pupusgn
@@ -70,3 +77,28 @@ Cache entries are exact-match. If method/path/query/body hash/header context cha
    - `MNetSecurityUtil`
 4. Only after fixed input/output vectors exist, implement a real local algorithm and keep the protected request service fail-closed until those vectors pass.
 
+## Emulator attempt on 2026-07-22
+
+This is a real alternative to connecting a physical phone, and it was tested locally.
+
+Observed local emulator assets:
+
+- emulator binary: `C:\Users\10579\codex-tools\android-sdk\emulator\emulator.exe`
+- x86_64 AVD: `codex-pupu-api35`
+- arm64 AVD config: `codex-pupu-api35-arm64`
+
+Results:
+
+1. `codex-pupu-api35` boots and `adb root` works.
+2. The original 6.4.9 APK installs, but crashes on startup because SecNeo selects `libDexHelper-x86.so`, which is not packaged.
+3. A local test build was rebuilt in ignored `.local/private/` with `com/secneo/apkwrapper/H.smali` patched from `DexHelper-x86` to `DexHelper`.
+4. The patched APK was v2/v3 signed and installed successfully.
+5. The patched APK gets past the missing-x86-library failure and loads `/lib/arm64/libDexHelper.so`.
+6. It then hits native `SIGSEGV` inside/after `libDexHelper.so` initialization under the x86_64 emulator's arm64 native bridge.
+7. The `codex-pupu-api35-arm64` AVD did not come online in the local Windows emulator within a three-minute boot window.
+
+Current interpretation:
+
+- physical phone is not the only route;
+- x86_64 emulator route is partially working but blocked by SecNeo/native-bridge crash;
+- a real arm64 Android runtime remains the most reliable dynamic route: phone, working arm64 emulator, WSA/third-party emulator with ARM support, or cloud device.
