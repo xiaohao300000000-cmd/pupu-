@@ -5,8 +5,10 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pupu_assistant.domain.assistant_cart.models import AssistantCartItem
 from pupu_assistant.domain.purchase.requirements import ProductCandidate
 from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
+from pupu_assistant.domain.repurchase import RepurchaseLine
 
 
 type FeishuCardPayload = dict[str, object]
@@ -71,6 +73,8 @@ class AssistantCartCardItem(BaseModel):
     subtotal: Decimal
     stock_available: bool
     alternatives: tuple[AssistantCartCardAlternative, ...] = ()
+    historical_unit_price: Decimal | None = None
+    recommendation_reason: str | None = None
 
 
 class AssistantCartCardView(BaseModel):
@@ -97,24 +101,16 @@ class AssistantCartCardView(BaseModel):
             cart_version=snapshot.cart.version,
             title="采购方案待确认",
             items=tuple(
-                AssistantCartCardItem(
-                    product_id=item.product.product_id,
-                    product_name=item.product.name,
-                    specification=item.product.specification,
-                    unit_price=item.product.unit_price,
-                    quantity=item.quantity,
-                    subtotal=item.estimated_subtotal,
-                    stock_available=item.product.stock_available,
-                    alternatives=_alternatives_for_product(
-                        product_id=item.product.product_id,
-                        store_id=snapshot.cart.store_id,
-                        candidates=candidates,
-                    ),
+                _cart_card_item(
+                    snapshot=snapshot,
+                    item=item,
+                    candidates=candidates,
                 )
                 for item in snapshot.cart.items
             ),
             estimated_total=snapshot.cart.estimated_total,
-            can_confirm=bool(snapshot.cart.items),
+            can_confirm=bool(snapshot.cart.items)
+            and all(item.product.stock_available for item in snapshot.cart.items),
         )
 
 
@@ -187,6 +183,42 @@ def render_assistant_cart_card(
     }
 
 
+def _cart_card_item(
+    *,
+    snapshot: PurchaseSessionSnapshot,
+    item: AssistantCartItem,
+    candidates: tuple[ProductCandidate, ...],
+) -> AssistantCartCardItem:
+    if snapshot.cart is None:
+        raise ValueError("purchase session has no assistant cart")
+    repurchase_line = _repurchase_line_for_product(
+        snapshot,
+        item.product.product_id,
+    )
+    return AssistantCartCardItem(
+        product_id=item.product.product_id,
+        product_name=item.product.name,
+        specification=item.product.specification,
+        unit_price=item.product.unit_price,
+        quantity=item.quantity,
+        subtotal=item.estimated_subtotal,
+        stock_available=item.product.stock_available,
+        alternatives=_alternatives_for_product(
+            product_id=item.product.product_id,
+            store_id=snapshot.cart.store_id,
+            candidates=candidates,
+        ),
+        historical_unit_price=(
+            repurchase_line.purchased_unit_price if repurchase_line else None
+        ),
+        recommendation_reason=(
+            repurchase_line.reason
+            if repurchase_line
+            else snapshot.context.selection_reasons.get(item.product.product_id)
+        ),
+    )
+
+
 def _render_cart_item(
     view: AssistantCartCardView,
     item: AssistantCartCardItem,
@@ -203,6 +235,27 @@ def _render_cart_item(
             "text_size": "normal",
         }
     ]
+    if item.historical_unit_price is not None:
+        price_delta = item.unit_price - item.historical_unit_price
+        direction = "上涨" if price_delta > 0 else "下降" if price_delta < 0 else "持平"
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": (
+                    f"上次购买价 ¥{item.historical_unit_price:.2f}｜"
+                    f"当前价格{direction} ¥{abs(price_delta):.2f}"
+                ),
+                "text_size": "normal",
+            }
+        )
+    if item.recommendation_reason:
+        elements.append(
+            {
+                "tag": "markdown",
+                "content": f"说明：{_escape_markdown(item.recommendation_reason)}",
+                "text_size": "normal",
+            }
+        )
     if item.quantity > 1:
         elements.append(
             _action_button(
@@ -329,6 +382,30 @@ def _alternatives_for_product(
         if candidate.requirement_id in matching_requirement_ids
         and candidate.product.product_id != product_id
         and candidate.product.store_id == store_id
+    )
+
+
+def _repurchase_line_for_product(
+    snapshot: PurchaseSessionSnapshot,
+    product_id: str,
+) -> RepurchaseLine | None:
+    plan = snapshot.context.repurchase_plan
+    if plan is None:
+        return None
+    return next(
+        (
+            line
+            for line in plan.lines
+            if (
+                line.current_product is not None
+                and line.current_product.product_id == product_id
+            )
+            or any(
+                substitute.product_id == product_id
+                for substitute in line.substitutes
+            )
+        ),
+        None,
     )
 
 

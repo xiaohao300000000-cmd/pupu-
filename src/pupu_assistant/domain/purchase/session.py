@@ -11,6 +11,8 @@ from pupu_assistant.domain.purchase.requirements import (
     ProductCandidate,
     PurchaseUnderstanding,
 )
+from pupu_assistant.domain.recipes import RecipeInventoryAdjustment
+from pupu_assistant.domain.repurchase import RepurchasePlan
 
 
 class PurchaseSessionContext(BaseModel):
@@ -27,6 +29,11 @@ class PurchaseSessionContext(BaseModel):
     understanding: PurchaseUnderstanding | None = None
     clarification_history: tuple[ClarificationExchange, ...] = ()
     product_candidates: tuple[ProductCandidate, ...] = ()
+    previous_cart: AssistantCart | None = None
+    recipe_adjustment: RecipeInventoryAdjustment | None = None
+    local_response: str | None = None
+    repurchase_plan: RepurchasePlan | None = None
+    selection_reasons: dict[str, str] = Field(default_factory=dict)
 
 
 class PurchaseSessionSnapshot(BaseModel):

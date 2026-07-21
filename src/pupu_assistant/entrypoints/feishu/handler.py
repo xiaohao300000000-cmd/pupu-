@@ -5,12 +5,20 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
+from pupu_assistant.application.cart_revision import (
+    CartRevisionError,
+    CartRevisionWorkflow,
+)
 from pupu_assistant.application.orchestrator import PurchaseAgentError
 from pupu_assistant.application.planning import (
     PurchasePlanningError,
     PurchasePlanningWorkflow,
 )
 from pupu_assistant.application.purchase_sessions import PurchaseSessionService
+from pupu_assistant.application.repurchase import (
+    RepurchasePlanningError,
+    RepurchaseWorkflow,
+)
 from pupu_assistant.application.state_machine import (
     InvalidPurchaseTransition,
     PurchaseState,
@@ -19,6 +27,7 @@ from pupu_assistant.application.understanding import (
     PurchaseUnderstandingWorkflow,
     UnderstandingResult,
 )
+from pupu_assistant.domain.purchase.requirements import PurchaseIntent
 from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
 from pupu_assistant.entrypoints.feishu.cards import (
     AssistantCartCardView,
@@ -66,11 +75,15 @@ class FeishuPurchaseHandler:
         planning: PurchasePlanningWorkflow,
         sessions: PurchaseSessionService,
         events: EventDedupRepository,
+        cart_revision: CartRevisionWorkflow | None = None,
+        repurchase: RepurchaseWorkflow | None = None,
     ) -> None:
         self._understanding = understanding
         self._planning = planning
         self._sessions = sessions
         self._events = events
+        self._cart_revision = cart_revision
+        self._repurchase = repurchase
 
     async def handle_text(self, message: FeishuTextMessage) -> FeishuHandlerResult:
         claimed = self._events.claim(
@@ -102,6 +115,37 @@ class FeishuPurchaseHandler:
                     answer=message.text,
                 )
                 return await self._continue(result, event_id=message.event_id)
+            if (
+                active.state_machine.state in CART_INTERACTION_STATES
+                and self._cart_revision is not None
+            ):
+                revised = await self._cart_revision.revise(
+                    task_id=active.task_id,
+                    user_id=active.user_id,
+                    user_message=message.text,
+                    request_id=message.event_id,
+                )
+                reply_text = revised.message or (
+                    "助手购物车已更新。"
+                    if revised.changed
+                    else "助手购物车没有变化。"
+                )
+                if revised.session.state_machine.state is PurchaseState.CANCELLED:
+                    return FeishuHandlerResult(
+                        event_id=message.event_id,
+                        task_id=revised.session.task_id,
+                        reply_text=reply_text or "当前采购任务已取消。",
+                        duplicate=False,
+                    )
+                return FeishuHandlerResult(
+                    event_id=message.event_id,
+                    task_id=revised.session.task_id,
+                    reply_text=reply_text,
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(revised.session)
+                    ),
+                )
             return FeishuHandlerResult(
                 event_id=message.event_id,
                 task_id=active.task_id,
@@ -116,7 +160,12 @@ class FeishuPurchaseHandler:
                     else None
                 ),
             )
-        except (PurchaseAgentError, DeepSeekError) as error:
+        except (
+            CartRevisionError,
+            InvalidPurchaseTransition,
+            PurchaseAgentError,
+            DeepSeekError,
+        ) as error:
             return FeishuHandlerResult(
                 event_id=message.event_id,
                 task_id=active.task_id if active else f"feishu:{message.message_id}",
@@ -284,6 +333,17 @@ class FeishuPurchaseHandler:
                 replacement=replacement,
                 operation_id=event.event_id,
             )
+            reasons = dict(snapshot.context.selection_reasons)
+            reasons.pop(action.product_id, None)
+            reasons[replacement.product_id] = "用户通过卡片选择替代商品"
+            context = snapshot.context.model_copy(
+                update={"selection_reasons": reasons}
+            )
+            snapshot = self._sessions.update_context(
+                task_id=snapshot.task_id,
+                user_id=snapshot.user_id,
+                context=context,
+            )
             snapshot = self._return_to_confirmation(
                 snapshot,
                 action_id=event.event_id,
@@ -377,11 +437,36 @@ class FeishuPurchaseHandler:
                 duplicate=False,
             )
         try:
+            if (
+                snapshot.context.understanding is not None
+                and snapshot.context.understanding.intent is PurchaseIntent.REPURCHASE
+            ):
+                if self._repurchase is None:
+                    raise RepurchasePlanningError(
+                        "repurchase workflow is not configured"
+                    )
+                repurchased = await self._repurchase.plan_previous_day(
+                    task_id=snapshot.task_id,
+                    user_id=snapshot.user_id,
+                )
+                return FeishuHandlerResult(
+                    event_id=event_id,
+                    task_id=snapshot.task_id,
+                    reply_text=repurchased.message,
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(repurchased.session)
+                    ),
+                )
             planned = await self._planning.plan(
                 task_id=snapshot.task_id,
                 user_id=snapshot.user_id,
             )
-        except (PurchasePlanningError, PupuConnectorError) as error:
+        except (
+            PurchasePlanningError,
+            RepurchasePlanningError,
+            PupuConnectorError,
+        ) as error:
             return FeishuHandlerResult(
                 event_id=event_id,
                 task_id=snapshot.task_id,
