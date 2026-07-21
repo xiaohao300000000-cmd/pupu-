@@ -35,6 +35,12 @@ from pupu_assistant.integrations.llm.deepseek import DeepSeekError
 from pupu_assistant.integrations.pupu.connector import PupuConnectorError
 
 
+CART_INTERACTION_STATES = {
+    PurchaseState.AWAITING_CONFIRMATION,
+    PurchaseState.AWAITING_RECONFIRMATION,
+}
+
+
 class EventDedupRepository(Protocol):
     def claim(
         self, *, event_id: str, event_type: str, user_id: str
@@ -101,6 +107,14 @@ class FeishuPurchaseHandler:
                 task_id=active.task_id,
                 reply_text=self._active_task_reply(active.state_machine.state),
                 duplicate=False,
+                reply_card=(
+                    render_assistant_cart_card(
+                        AssistantCartCardView.from_session(active)
+                    )
+                    if active.cart is not None
+                    and active.state_machine.state in CART_INTERACTION_STATES
+                    else None
+                ),
             )
         except (PurchaseAgentError, DeepSeekError) as error:
             return FeishuHandlerResult(
@@ -151,6 +165,21 @@ class FeishuPurchaseHandler:
                 task_id=action.task_id,
                 reply_text="这张卡片已经过期，请使用最新采购方案。",
                 duplicate=False,
+                reply_card=(
+                    render_assistant_cart_card(
+                        AssistantCartCardView.from_session(snapshot)
+                    )
+                    if snapshot.cart is not None
+                    and snapshot.state_machine.state in CART_INTERACTION_STATES
+                    else None
+                ),
+            )
+        if snapshot.state_machine.state not in CART_INTERACTION_STATES:
+            return FeishuHandlerResult(
+                event_id=event.event_id,
+                task_id=action.task_id,
+                reply_text="当前采购任务已不再接受这张卡片的操作。",
+                duplicate=False,
             )
 
         if action.action is CartCardAction.SET_QUANTITY:
@@ -163,7 +192,10 @@ class FeishuPurchaseHandler:
                 quantity=action.quantity,
                 operation_id=event.event_id,
             )
-            snapshot = self._return_to_confirmation(snapshot)
+            snapshot = self._return_to_confirmation(
+                snapshot,
+                action_id=event.event_id,
+            )
             return self._card_result(event.event_id, snapshot, "数量已更新。")
         if action.action is CartCardAction.REMOVE:
             assert action.product_id is not None
@@ -174,17 +206,126 @@ class FeishuPurchaseHandler:
                 operation_id=event.event_id,
             )
             if snapshot.cart is not None and not snapshot.cart.items:
+                snapshot = self._record_card_action(
+                    snapshot,
+                    action_id=event.event_id,
+                )
                 return self._card_result(
                     event.event_id,
                     snapshot,
                     "商品已删除，助手购物车现在为空；请重新描述要购买的商品。",
                 )
-            snapshot = self._return_to_confirmation(snapshot)
+            snapshot = self._return_to_confirmation(
+                snapshot,
+                action_id=event.event_id,
+            )
             return self._card_result(event.event_id, snapshot, "商品已删除。")
+        if action.action is CartCardAction.REPLACE:
+            assert action.product_id is not None
+            assert action.replacement_product_id is not None
+            if not any(
+                item.product.product_id == action.product_id
+                for item in snapshot.cart.items
+            ):
+                return FeishuHandlerResult(
+                    event_id=event.event_id,
+                    task_id=action.task_id,
+                    reply_text="待替换商品已不在当前助手购物车中。",
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(snapshot)
+                    ),
+                )
+            matching_requirement_ids = {
+                candidate.requirement_id
+                for candidate in snapshot.context.product_candidates
+                if candidate.product.product_id == action.product_id
+            }
+            replacement = next(
+                (
+                    candidate.product
+                    for candidate in snapshot.context.product_candidates
+                    if candidate.requirement_id in matching_requirement_ids
+                    and candidate.product.product_id == action.replacement_product_id
+                    and candidate.product.store_id == snapshot.cart.store_id
+                ),
+                None,
+            )
+            if replacement is None:
+                return FeishuHandlerResult(
+                    event_id=event.event_id,
+                    task_id=action.task_id,
+                    reply_text="替代商品已不在当前候选中，请刷新采购方案后重试。",
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(snapshot)
+                    ),
+                )
+            if not replacement.stock_available:
+                return FeishuHandlerResult(
+                    event_id=event.event_id,
+                    task_id=action.task_id,
+                    reply_text="替代商品当前库存不足，未修改助手购物车。",
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(snapshot)
+                    ),
+                )
+            snapshot = self._sessions.replace_product(
+                task_id=action.task_id,
+                user_id=event.operator_id,
+                product_id=action.product_id,
+                replacement=replacement,
+                operation_id=event.event_id,
+            )
+            snapshot = self._return_to_confirmation(
+                snapshot,
+                action_id=event.event_id,
+            )
+            return self._card_result(event.event_id, snapshot, "商品已替换。")
+        if action.action is CartCardAction.VIEW_DETAIL:
+            assert action.product_id is not None
+            item = next(
+                (
+                    item
+                    for item in snapshot.cart.items
+                    if item.product.product_id == action.product_id
+                ),
+                None,
+            )
+            if item is None:
+                return FeishuHandlerResult(
+                    event_id=event.event_id,
+                    task_id=action.task_id,
+                    reply_text="商品已不在当前助手购物车中。",
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(snapshot)
+                    ),
+                )
+            snapshot = self._record_card_action(
+                snapshot,
+                action_id=event.event_id,
+            )
+            stock_text = "有货" if item.product.stock_available else "库存不足"
+            return self._card_result(
+                event.event_id,
+                snapshot,
+                (
+                    f"{item.product.name}｜{item.product.specification}｜"
+                    f"单价 ¥{item.product.unit_price:.2f}｜数量 {item.quantity}｜"
+                    f"{stock_text}。商品信息来自已保存的朴朴候选快照。"
+                ),
+            )
         if action.action is CartCardAction.CANCEL:
             machine = replace(snapshot.state_machine)
             machine.cancel()
-            snapshot = snapshot.model_copy(update={"state_machine": machine})
+            context = snapshot.context.model_copy(
+                update={"last_card_action_id": event.event_id}
+            )
+            snapshot = snapshot.model_copy(
+                update={"state_machine": machine, "context": context}
+            )
             self._sessions.save_progress(snapshot)
             return FeishuHandlerResult(
                 event_id=event.event_id,
@@ -193,10 +334,17 @@ class FeishuPurchaseHandler:
                 duplicate=False,
             )
         if action.action is CartCardAction.CONFIRM:
+            snapshot = self._record_card_action(
+                snapshot,
+                action_id=event.event_id,
+            )
             return FeishuHandlerResult(
                 event_id=event.event_id,
                 task_id=snapshot.task_id,
-                reply_text="采购方案已确认，但真实朴朴同步尚不可用；方案会继续保留。",
+                reply_text=(
+                    "已收到确认意图，但尚未创建真实写入确认凭证，"
+                    "也没有修改朴朴购物车；采购方案会继续保留。"
+                ),
                 duplicate=False,
             )
         raise InvalidPurchaseTransition(f"Unsupported cart action: {action.action}")
@@ -252,10 +400,30 @@ class FeishuPurchaseHandler:
     def _return_to_confirmation(
         self,
         snapshot: PurchaseSessionSnapshot,
+        *,
+        action_id: str,
     ) -> PurchaseSessionSnapshot:
         machine = replace(snapshot.state_machine)
         machine.request_confirmation()
-        updated = snapshot.model_copy(update={"state_machine": machine})
+        context = snapshot.context.model_copy(
+            update={"last_card_action_id": action_id}
+        )
+        updated = snapshot.model_copy(
+            update={"state_machine": machine, "context": context}
+        )
+        self._sessions.save_progress(updated)
+        return updated
+
+    def _record_card_action(
+        self,
+        snapshot: PurchaseSessionSnapshot,
+        *,
+        action_id: str,
+    ) -> PurchaseSessionSnapshot:
+        context = snapshot.context.model_copy(
+            update={"last_card_action_id": action_id}
+        )
+        updated = snapshot.model_copy(update={"context": context})
         self._sessions.save_progress(updated)
         return updated
 

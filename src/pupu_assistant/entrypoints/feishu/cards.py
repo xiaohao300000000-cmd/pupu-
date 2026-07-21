@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from pupu_assistant.domain.purchase.requirements import ProductCandidate
 from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
 
 
@@ -14,6 +15,8 @@ type FeishuCardPayload = dict[str, object]
 class CartCardAction(StrEnum):
     SET_QUANTITY = "set_quantity"
     REMOVE = "remove"
+    REPLACE = "replace"
+    VIEW_DETAIL = "view_detail"
     CONFIRM = "confirm"
     CANCEL = "cancel"
 
@@ -27,16 +30,34 @@ class CartCardActionValue(BaseModel):
     task_id: str = Field(min_length=1)
     cart_version: int = Field(ge=0)
     product_id: str | None = None
+    replacement_product_id: str | None = None
     quantity: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def require_action_fields(self) -> CartCardActionValue:
-        if self.action in {CartCardAction.SET_QUANTITY, CartCardAction.REMOVE}:
+        if self.action in {
+            CartCardAction.SET_QUANTITY,
+            CartCardAction.REMOVE,
+            CartCardAction.REPLACE,
+            CartCardAction.VIEW_DETAIL,
+        }:
             if not self.product_id:
                 raise ValueError("cart item action requires product_id")
         if self.action is CartCardAction.SET_QUANTITY and self.quantity is None:
             raise ValueError("set_quantity action requires quantity")
+        if self.action is CartCardAction.REPLACE and not self.replacement_product_id:
+            raise ValueError("replace action requires replacement_product_id")
         return self
+
+
+class AssistantCartCardAlternative(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    product_id: str
+    product_name: str
+    specification: str
+    unit_price: Decimal
+    stock_available: bool
 
 
 class AssistantCartCardItem(BaseModel):
@@ -49,6 +70,7 @@ class AssistantCartCardItem(BaseModel):
     quantity: int
     subtotal: Decimal
     stock_available: bool
+    alternatives: tuple[AssistantCartCardAlternative, ...] = ()
 
 
 class AssistantCartCardView(BaseModel):
@@ -69,6 +91,7 @@ class AssistantCartCardView(BaseModel):
     ) -> AssistantCartCardView:
         if snapshot.cart is None:
             raise ValueError("purchase session has no assistant cart")
+        candidates = snapshot.context.product_candidates
         return cls(
             task_id=snapshot.task_id,
             cart_version=snapshot.cart.version,
@@ -82,6 +105,11 @@ class AssistantCartCardView(BaseModel):
                     quantity=item.quantity,
                     subtotal=item.estimated_subtotal,
                     stock_available=item.product.stock_available,
+                    alternatives=_alternatives_for_product(
+                        product_id=item.product.product_id,
+                        store_id=snapshot.cart.store_id,
+                        candidates=candidates,
+                    ),
                 )
                 for item in snapshot.cart.items
             ),
@@ -200,6 +228,33 @@ def _render_cart_item(
     )
     elements.append(
         _action_button(
+            text="查看详情",
+            value=_action_value(
+                view,
+                CartCardAction.VIEW_DETAIL,
+                product_id=item.product_id,
+            ),
+        )
+    )
+    for alternative in item.alternatives:
+        stock_suffix = "" if alternative.stock_available else "（库存不足）"
+        elements.append(
+            _action_button(
+                text=(
+                    f"换成 {alternative.product_name} "
+                    f"¥{alternative.unit_price:.2f}{stock_suffix}"
+                ),
+                value=_action_value(
+                    view,
+                    CartCardAction.REPLACE,
+                    product_id=item.product_id,
+                    replacement_product_id=alternative.product_id,
+                ),
+                disabled=not alternative.stock_available,
+            )
+        )
+    elements.append(
+        _action_button(
             text="删除",
             value=_action_value(
                 view,
@@ -218,12 +273,14 @@ def _action_button(
     text: str,
     value: dict[str, object],
     button_type: str = "default",
+    disabled: bool = False,
 ) -> dict[str, object]:
     return {
         "tag": "button",
         "text": {"tag": "plain_text", "content": text},
         "type": button_type,
         "width": "fill",
+        "disabled": disabled,
         "behaviors": [{"type": "callback", "value": value}],
     }
 
@@ -233,6 +290,7 @@ def _action_value(
     action: CartCardAction,
     *,
     product_id: str | None = None,
+    replacement_product_id: str | None = None,
     quantity: int | None = None,
 ) -> dict[str, object]:
     value = CartCardActionValue(
@@ -240,9 +298,38 @@ def _action_value(
         task_id=view.task_id,
         cart_version=view.cart_version,
         product_id=product_id,
+        replacement_product_id=replacement_product_id,
         quantity=quantity,
     )
     return value.model_dump(mode="json", exclude_none=True)
+
+
+def _alternatives_for_product(
+    *,
+    product_id: str,
+    store_id: str,
+    candidates: tuple[ProductCandidate, ...],
+) -> tuple[AssistantCartCardAlternative, ...]:
+    matching_requirement_ids = {
+        candidate.requirement_id
+        for candidate in candidates
+        if candidate.product.product_id == product_id
+    }
+    if not matching_requirement_ids:
+        return ()
+    return tuple(
+        AssistantCartCardAlternative(
+            product_id=candidate.product.product_id,
+            product_name=candidate.product.name,
+            specification=candidate.product.specification,
+            unit_price=candidate.product.unit_price,
+            stock_available=candidate.product.stock_available,
+        )
+        for candidate in candidates
+        if candidate.requirement_id in matching_requirement_ids
+        and candidate.product.product_id != product_id
+        and candidate.product.store_id == store_id
+    )
 
 
 def _escape_markdown(value: str) -> str:
