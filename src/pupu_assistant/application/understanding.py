@@ -51,7 +51,11 @@ servings or another essential constraint is missing. For a dish recommendation,
 submit no more than three structured options and never invent a platform price. Do not
 call a platform API or request credentials. For an explicit preference or inventory
 update, submit only the corresponding structured changes; never modify memory during
-another intent."""
+another intent. For view_preferences, view_inventory, view_cart, modify_cart, or
+clear_shopping_history, submit the intent without inventing purchase requirements;
+the application handles the local action and any destructive confirmation."""
+
+CLEAR_HISTORY_CONFIRMATION = "确认清空购物历史缓存"
 
 
 class SubmitPurchaseUnderstandingArguments(PurchaseUnderstanding):
@@ -107,7 +111,15 @@ class HouseholdMemoryProvider(Protocol):
     ) -> bool: ...
 
 
+class ShoppingHistoryProvider(Protocol):
+    def clear_shopping_history(self, *, user_id: str) -> int: ...
+
+
 class HouseholdMemoryUnavailable(PurchaseAgentError):
+    pass
+
+
+class ShoppingHistoryUnavailable(PurchaseAgentError):
     pass
 
 
@@ -138,12 +150,14 @@ class PurchaseUnderstandingWorkflow:
         max_tool_rounds: int,
         household_context: HouseholdMemoryProvider | None = None,
         recipe_inventory: RecipeInventoryService | None = None,
+        shopping_history: ShoppingHistoryProvider | None = None,
     ) -> None:
         self._provider = provider
         self._sessions = sessions
         self._max_tool_rounds = max_tool_rounds
         self._household_context = household_context
         self._recipe_inventory = recipe_inventory or RecipeInventoryService()
+        self._shopping_history = shopping_history
 
     async def start(
         self,
@@ -251,6 +265,8 @@ class PurchaseUnderstandingWorkflow:
         recipe_adjustment: RecipeInventoryAdjustment | None = None
         local_response: str | None = None
         dish_selection_question: str | None = None
+        local_control_question: str | None = None
+        history_clear_confirmed = False
         if (
             understanding.intent is PurchaseIntent.RECIPE_PURCHASE
             and understanding.requirements
@@ -278,11 +294,37 @@ class PurchaseUnderstandingWorkflow:
             dish_selection_question = (
                 f"{local_response}\n请选择 1、2 或 3，我再生成采购清单？"
             )
+        if understanding.intent is PurchaseIntent.VIEW_PREFERENCES:
+            local_response = self._preference_response(snapshot.user_id)
+        elif understanding.intent is PurchaseIntent.VIEW_INVENTORY:
+            local_response = self._inventory_response(snapshot.user_id)
+        elif understanding.intent is PurchaseIntent.CLEAR_SHOPPING_HISTORY:
+            history_clear_confirmed = self._history_clear_confirmed(snapshot)
+            if history_clear_confirmed:
+                history = self._require_shopping_history()
+                removed = history.clear_shopping_history(user_id=snapshot.user_id)
+                local_response = f"已清空 {removed} 条购物历史缓存。"
+            else:
+                local_control_question = (
+                    "清空购物历史缓存后无法恢复。"
+                    f"如需继续，请回复：{CLEAR_HISTORY_CONFIRMATION}？"
+                )
+        elif understanding.intent in {
+            PurchaseIntent.VIEW_CART,
+            PurchaseIntent.MODIFY_CART,
+        }:
+            local_response = "当前没有进行中的助手购物车，请先描述采购需求。"
 
         context = PurchaseSessionContext(
             original_request=snapshot.context.original_request,
             pending_question=(
-                understanding.clarification_question or dish_selection_question
+                local_control_question
+                or (
+                    None
+                    if history_clear_confirmed
+                    else understanding.clarification_question
+                )
+                or dish_selection_question
             ),
             dish_name=understanding.dish_name,
             servings=understanding.servings,
@@ -294,6 +336,7 @@ class PurchaseUnderstandingWorkflow:
             previous_cart=snapshot.context.previous_cart,
             recipe_adjustment=recipe_adjustment,
             local_response=local_response,
+            repurchase_plan=snapshot.context.repurchase_plan,
         )
         machine = replace(snapshot.state_machine)
         if context.pending_question:
@@ -302,6 +345,14 @@ class PurchaseUnderstandingWorkflow:
             understanding.intent is PurchaseIntent.RECIPE_PURCHASE
             and not understanding.requirements
         ):
+            machine.complete_local_update()
+        elif understanding.intent in {
+            PurchaseIntent.VIEW_CART,
+            PurchaseIntent.MODIFY_CART,
+            PurchaseIntent.VIEW_PREFERENCES,
+            PurchaseIntent.VIEW_INVENTORY,
+            PurchaseIntent.CLEAR_SHOPPING_HISTORY,
+        }:
             machine.complete_local_update()
         elif understanding.intent is PurchaseIntent.PREFERENCE_UPDATE:
             household_memory = self._require_household_memory()
@@ -355,6 +406,48 @@ class PurchaseUnderstandingWorkflow:
                 "Household memory is not configured for this runtime"
             )
         return self._household_context
+
+    def _require_shopping_history(self) -> ShoppingHistoryProvider:
+        if self._shopping_history is None:
+            raise ShoppingHistoryUnavailable(
+                "Shopping history storage is not configured for this runtime"
+            )
+        return self._shopping_history
+
+    def _preference_response(self, user_id: str) -> str:
+        household = self._require_household_memory().snapshot(user_id=user_id)
+        if not household.preferences:
+            return "当前没有已保存的长期偏好。"
+        lines = ["当前已保存的长期偏好："]
+        for preference in household.preferences:
+            value = json.dumps(preference.value, ensure_ascii=False)
+            lines.append(
+                f"- {preference.preference_type.value}｜"
+                f"{preference.target}：{value}"
+            )
+        return "\n".join(lines)
+
+    def _inventory_response(self, user_id: str) -> str:
+        household = self._require_household_memory().snapshot(user_id=user_id)
+        if not household.inventory:
+            return "当前没有已保存的家庭库存。"
+        lines = ["当前家庭库存估算："]
+        for item in household.inventory:
+            lines.append(
+                f"- {item.ingredient_name}：{item.quantity} {item.unit}，"
+                f"更新于 {item.updated_at.isoformat()}"
+            )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _history_clear_confirmed(snapshot: PurchaseSessionSnapshot) -> bool:
+        if not snapshot.context.clarification_history:
+            return False
+        exchange = snapshot.context.clarification_history[-1]
+        return (
+            CLEAR_HISTORY_CONFIRMATION in exchange.question
+            and exchange.answer.strip() == CLEAR_HISTORY_CONFIRMATION
+        )
 
     @staticmethod
     def _result(

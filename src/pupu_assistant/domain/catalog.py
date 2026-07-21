@@ -59,3 +59,22 @@ class OperationAuditEvent(BaseModel):
     tool_result: JsonValue | None = None
     confirmation_id: str | None = None
     created_at: datetime
+
+
+class ShoppingHistoryEntry(BaseModel):
+    """A user-clearable cache entry sourced from a real Connector order detail."""
+
+    model_config = ConfigDict(frozen=True)
+
+    history_id: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+    order_id: str = Field(min_length=1)
+    store_id: str = Field(min_length=1)
+    product_id: str = Field(min_length=1)
+    store_product_id: str = Field(min_length=1)
+    product_name: str = Field(min_length=1)
+    specification: str = Field(min_length=1)
+    quantity: int = Field(ge=1)
+    purchased_unit_price: Decimal = Field(ge=0)
+    purchased_at: datetime
+    cached_at: datetime

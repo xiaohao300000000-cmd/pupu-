@@ -117,6 +117,7 @@ def build_assistant_runtime(
         sessions=sessions,
         max_tool_rounds=settings.llm_max_tool_rounds,
         household_context=household_repository,
+        shopping_history=catalog_repository,
     )
     planning = PurchasePlanningWorkflow(
         provider=provider,
@@ -134,6 +135,7 @@ def build_assistant_runtime(
         connector=connector,
         sessions=sessions,
         product_facts=catalog_repository,
+        shopping_history=catalog_repository,
     )
     handler = FeishuPurchaseHandler(
         understanding=understanding,

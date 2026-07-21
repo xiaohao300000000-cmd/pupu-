@@ -28,6 +28,7 @@ from pupu_assistant.domain.catalog import (
     OperationAuditEvent,
     ProductPricePoint,
     ProductPriceSummary,
+    ShoppingHistoryEntry,
 )
 
 
@@ -89,6 +90,40 @@ class OperationAuditRecord(ProductCatalogBase):
     tool_result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     confirmation_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ShoppingHistoryCacheRecord(ProductCatalogBase):
+    __tablename__ = "shopping_history_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "order_id",
+            "store_product_id",
+            name="uq_shopping_history_order_product",
+        ),
+    )
+
+    history_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    order_id: Mapped[str] = mapped_column(String(128), index=True, nullable=False)
+    store_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    product_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    store_product_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    product_name: Mapped[str] = mapped_column(Text, nullable=False)
+    specification: Mapped[str] = mapped_column(Text, nullable=False)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    purchased_unit_price: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4),
+        nullable=False,
+    )
+    purchased_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    cached_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
 
 
 class SqlAlchemyProductCatalogRepository:
@@ -303,12 +338,100 @@ class SqlAlchemyProductCatalogRepository:
             ).all()
             return tuple(self._audit_event(record) for record in records)
 
-    def clear_user_operation_history(self, *, user_id: str) -> int:
+    def cache_purchase(
+        self,
+        *,
+        user_id: str,
+        order_id: str,
+        store_id: str,
+        product_id: str,
+        store_product_id: str,
+        product_name: str,
+        specification: str,
+        quantity: int,
+        purchased_unit_price: Decimal,
+        purchased_at: datetime,
+    ) -> ShoppingHistoryEntry:
+        user_id = self._required_text(user_id, field_name="user_id")
+        order_id = self._required_text(order_id, field_name="order_id")
+        store_id = self._required_text(store_id, field_name="store_id")
+        product_id = self._required_text(product_id, field_name="product_id")
+        store_product_id = self._required_text(
+            store_product_id,
+            field_name="store_product_id",
+        )
+        product_name = self._required_text(product_name, field_name="product_name")
+        specification = self._required_text(
+            specification,
+            field_name="specification",
+        )
+        if quantity < 1:
+            raise ValueError("quantity must be at least one")
+        purchased_unit_price = Decimal(purchased_unit_price)
+        if purchased_unit_price < 0:
+            raise ValueError("purchased_unit_price cannot be negative")
+        purchased_at = self._as_utc(purchased_at)
+        now = datetime.now(UTC)
+        with self._session_factory.begin() as session:
+            record = session.scalar(
+                select(ShoppingHistoryCacheRecord).where(
+                    ShoppingHistoryCacheRecord.user_id == user_id,
+                    ShoppingHistoryCacheRecord.order_id == order_id,
+                    ShoppingHistoryCacheRecord.store_product_id == store_product_id,
+                )
+            )
+            if record is None:
+                record = ShoppingHistoryCacheRecord(
+                    history_id=uuid4().hex,
+                    user_id=user_id,
+                    order_id=order_id,
+                    store_id=store_id,
+                    product_id=product_id,
+                    store_product_id=store_product_id,
+                    product_name=product_name,
+                    specification=specification,
+                    quantity=quantity,
+                    purchased_unit_price=purchased_unit_price,
+                    purchased_at=purchased_at,
+                    cached_at=now,
+                )
+                session.add(record)
+            else:
+                record.store_id = store_id
+                record.product_id = product_id
+                record.product_name = product_name
+                record.specification = specification
+                record.quantity = quantity
+                record.purchased_unit_price = purchased_unit_price
+                record.purchased_at = purchased_at
+                record.cached_at = now
+            session.flush()
+            return self._shopping_history(record)
+
+    def list_shopping_history(
+        self,
+        *,
+        user_id: str,
+        limit: int = 100,
+    ) -> tuple[ShoppingHistoryEntry, ...]:
+        user_id = self._required_text(user_id, field_name="user_id")
+        if limit < 1 or limit > 1000:
+            raise ValueError("limit must be between 1 and 1000")
+        with self._session_factory() as session:
+            records = session.scalars(
+                select(ShoppingHistoryCacheRecord)
+                .where(ShoppingHistoryCacheRecord.user_id == user_id)
+                .order_by(ShoppingHistoryCacheRecord.purchased_at.desc())
+                .limit(limit)
+            ).all()
+            return tuple(self._shopping_history(record) for record in records)
+
+    def clear_shopping_history(self, *, user_id: str) -> int:
         user_id = self._required_text(user_id, field_name="user_id")
         with self._session_factory.begin() as session:
             result = session.execute(
-                delete(OperationAuditRecord).where(
-                    OperationAuditRecord.user_id == user_id
+                delete(ShoppingHistoryCacheRecord).where(
+                    ShoppingHistoryCacheRecord.user_id == user_id
                 )
             )
             return int(result.rowcount or 0)
@@ -365,6 +488,25 @@ class SqlAlchemyProductCatalogRepository:
             price=record.price,
             stock_available=record.stock_available,
             captured_at=record.captured_at,
+        )
+
+    @staticmethod
+    def _shopping_history(
+        record: ShoppingHistoryCacheRecord,
+    ) -> ShoppingHistoryEntry:
+        return ShoppingHistoryEntry(
+            history_id=record.history_id,
+            user_id=record.user_id,
+            order_id=record.order_id,
+            store_id=record.store_id,
+            product_id=record.product_id,
+            store_product_id=record.store_product_id,
+            product_name=record.product_name,
+            specification=record.specification,
+            quantity=record.quantity,
+            purchased_unit_price=record.purchased_unit_price,
+            purchased_at=record.purchased_at,
+            cached_at=record.cached_at,
         )
 
     @classmethod

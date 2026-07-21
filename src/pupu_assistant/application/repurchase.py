@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
+from typing import Protocol
 
 from pupu_assistant.application.purchase_sessions import PurchaseSessionService
 from pupu_assistant.application.purchase_tools import ProductFactRecorder
@@ -45,6 +46,23 @@ class RepurchaseProductsUnavailable(RepurchasePlanningError):
     pass
 
 
+class ShoppingHistoryRecorder(Protocol):
+    def cache_purchase(
+        self,
+        *,
+        user_id: str,
+        order_id: str,
+        store_id: str,
+        product_id: str,
+        store_product_id: str,
+        product_name: str,
+        specification: str,
+        quantity: int,
+        purchased_unit_price: Decimal,
+        purchased_at: datetime,
+    ) -> object: ...
+
+
 @dataclass(frozen=True)
 class RepurchasePlanningResult:
     message: str
@@ -60,10 +78,12 @@ class RepurchaseWorkflow:
         connector: PupuConnector,
         sessions: PurchaseSessionService,
         product_facts: ProductFactRecorder | None = None,
+        shopping_history: ShoppingHistoryRecorder | None = None,
     ) -> None:
         self._connector = connector
         self._sessions = sessions
         self._product_facts = product_facts
+        self._shopping_history = shopping_history
 
     async def plan_previous_day(
         self,
@@ -137,6 +157,13 @@ class RepurchaseWorkflow:
         candidates: list[ProductCandidate] = []
         current_total = Decimal("0")
         for index, order_item in enumerate(detail.items, start=1):
+            self._cache_purchase(
+                user_id=user_id,
+                order_id=order.order_id,
+                store_id=store.store_id,
+                purchased_at=order.created_at,
+                item=order_item,
+            )
             requirement_id = (
                 f"repurchase:{order.order_id}:{index}:{order_item.store_product_id}"
             )
@@ -313,6 +340,30 @@ class RepurchaseWorkflow:
     def _record_product(self, product: ProductSnapshot) -> None:
         if self._product_facts is not None:
             self._product_facts.record_product(product)
+
+    def _cache_purchase(
+        self,
+        *,
+        user_id: str,
+        order_id: str,
+        store_id: str,
+        purchased_at: datetime,
+        item: OrderItem,
+    ) -> None:
+        if self._shopping_history is None:
+            return
+        self._shopping_history.cache_purchase(
+            user_id=user_id,
+            order_id=order_id,
+            store_id=store_id,
+            product_id=item.product_id,
+            store_product_id=item.store_product_id,
+            product_name=item.name,
+            specification=item.specification,
+            quantity=item.quantity,
+            purchased_unit_price=item.purchased_unit_price,
+            purchased_at=purchased_at,
+        )
 
     @staticmethod
     def _as_aware(value: datetime) -> datetime:

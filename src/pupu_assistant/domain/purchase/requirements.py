@@ -19,6 +19,9 @@ class PurchaseIntent(StrEnum):
     MODIFY_CART = "modify_cart"
     PREFERENCE_UPDATE = "preference_update"
     INVENTORY_UPDATE = "inventory_update"
+    VIEW_PREFERENCES = "view_preferences"
+    VIEW_INVENTORY = "view_inventory"
+    CLEAR_SHOPPING_HISTORY = "clear_shopping_history"
     UNKNOWN = "unknown"
 
 
@@ -156,6 +159,36 @@ class PurchaseUnderstanding(BaseModel):
             raise ValueError(
                 "dish recommendations require dish_recommendation intent"
             )
+        local_control_intents = {
+            PurchaseIntent.VIEW_CART,
+            PurchaseIntent.MODIFY_CART,
+            PurchaseIntent.VIEW_PREFERENCES,
+            PurchaseIntent.VIEW_INVENTORY,
+            PurchaseIntent.CLEAR_SHOPPING_HISTORY,
+        }
+        if self.intent in local_control_intents and (
+            self.requirements
+            or self.preference_changes
+            or self.inventory_changes
+            or self.dish_recommendations
+        ):
+            raise ValueError("local control intent cannot include purchase changes")
+        if (
+            self.intent
+            in {
+                PurchaseIntent.VIEW_CART,
+                PurchaseIntent.MODIFY_CART,
+                PurchaseIntent.VIEW_PREFERENCES,
+                PurchaseIntent.VIEW_INVENTORY,
+            }
+            and self.clarification_question is not None
+        ):
+            raise ValueError("read-only local control intent cannot ask a question")
+        if (
+            self.intent is PurchaseIntent.UNKNOWN
+            and self.clarification_question is None
+        ):
+            raise ValueError("unknown intent requires one clarification question")
         return self
 
 
