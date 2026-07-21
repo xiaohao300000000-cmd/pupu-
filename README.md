@@ -106,6 +106,7 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 ## Black-box signer fixture path
 
 - `.local/bin/pupusgn` is a committed offline Mac/Linux signer wrapper. It reads JSON, merges supplied black-box `seal/sign` headers, writes JSON to stdout, and performs no HTTP requests.
-- `.local/pupusgn-test.json` contains two redacted runnable cases: one protected product read and one cart write fixture.
+- `.local/pupusgn-test.json` contains two redacted supplied-result cases: one protected product read and one cart write fixture.
+- `.local/pupusgn-sdu-input.json` contains two stdin-to-local-sdu cases with no precomputed signatures; it requires `--sdu-command` or `PUPUSGN_SDU_CMD`.
 - `.local/pupu-cases.json` records current 6.4.9 product/cart candidate routes with placeholder-only method/path/query/body shapes.
 - Details: [Black-box Pupu signer materials](docs/research/blackbox-signer-materials-2026-07-21.md)

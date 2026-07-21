@@ -9,6 +9,7 @@ __pycache__/
 .local/bin/*
 !.local/bin/pupusgn
 !.local/pupusgn-test.json
+!.local/pupusgn-sdu-input.json
 !.local/pupu-cases.json
 .tools/
 *.apk

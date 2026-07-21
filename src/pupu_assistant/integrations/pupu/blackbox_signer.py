@@ -50,6 +50,44 @@ def _normalize_headers(headers: Mapping[str, Any] | None) -> dict[str, str]:
     return {str(name).lower(): str(value) for name, value in dict(headers or {}).items()}
 
 
+def _first_present(request: Mapping[str, Any], *keys: str) -> Any:
+    for key in keys:
+        value = request.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _nested_context(request: Mapping[str, Any]) -> Mapping[str, Any]:
+    context = request.get("context", request.get("device_context"))
+    return context if isinstance(context, Mapping) else {}
+
+
+def _context_value(request: Mapping[str, Any], *keys: str) -> Any:
+    context = _nested_context(request)
+    value = _first_present(context, *keys)
+    if value not in (None, ""):
+        return value
+    return _first_present(request, *keys)
+
+
+def _request_method(request: Mapping[str, Any]) -> str:
+    return str(_first_present(request, "method", "mto") or "GET").upper()
+
+
+def _request_path(request: Mapping[str, Any]) -> str:
+    return str(_first_present(request, "path", "ah", "at", "url_path", "uri") or "")
+
+
+def _request_headers(request: Mapping[str, Any]) -> dict[str, str]:
+    headers = _first_present(request, "headers", "raw_headers", "hadr", "edr")
+    return _normalize_headers(headers if isinstance(headers, Mapping) else None)
+
+
+def _request_body(request: Mapping[str, Any]) -> Any:
+    return _first_present(request, "body", "request_body", "uybd")
+
+
 def _normalize_query(query: Any) -> list[list[str]]:
     if query in (None, ""):
         return []
@@ -67,12 +105,12 @@ def build_blackbox_signing_payload(request: Mapping[str, Any]) -> dict[str, Any]
     directly to their private signer and only store this normalized shape in Git.
     """
 
-    method = str(request.get("method", request.get("mto", "GET"))).upper()
-    path = str(request.get("path", request.get("ah", "")))
+    method = _request_method(request)
+    path = _request_path(request)
     if not path.startswith("/"):
         raise ValueError("Pupu request path must start with '/'")
 
-    body = request.get("body")
+    body = _request_body(request)
     body_digest = request.get("body_sha256")
     body_data = _body_bytes(body)
     if body_digest is None and body_data is not None:
@@ -82,30 +120,48 @@ def build_blackbox_signing_payload(request: Mapping[str, Any]) -> dict[str, Any]
         "method": method,
         "path": path,
         "query": _normalize_query(request.get("query", request.get("query_params"))),
-        "headers": _normalize_headers(request.get("headers", request.get("raw_headers"))),
+        "headers": _request_headers(request),
     }
     if body_digest is not None:
         normalized["body_sha256"] = str(body_digest)
         normalized["body"] = "<BODY_SHA256_ONLY>"
 
-    for source_key, target_key in (
-        ("app_version", "app_version"),
-        ("pp_version", "app_version"),
-        ("os_type", "os_type"),
-        ("pp_os", "os_type"),
-        ("device_id", "pp_device_id"),
-        ("pp_device_id", "pp_device_id"),
-        ("user_id", "user_id"),
-        ("u_user_id", "user_id"),
-        ("store_id", "store_id"),
-        ("city_zip", "city_zip"),
-        ("zip", "city_zip"),
-    ):
-        value = request.get(source_key)
-        if value not in (None, ""):
-            normalized[target_key] = str(value)
+    context = _collect_context(request)
+    normalized.update(context)
 
     return normalized
+
+
+def _collect_context(request: Mapping[str, Any]) -> dict[str, str]:
+    context: dict[str, str] = {}
+    for source_keys, target_key in (
+        (("app_version", "pp_version"), "app_version"),
+        (("os_type", "pp_os"), "os_type"),
+        (("device_id", "pp_device_id"), "pp_device_id"),
+        (("user_id", "u_user_id"), "user_id"),
+        (("su_id", "suid", "pp_suid"), "su_id"),
+        (("store_id", "pp_store_id"), "store_id"),
+        (("place_id", "pp_place_id"), "place_id"),
+        (("city_zip", "zip", "place_zip"), "city_zip"),
+    ):
+        value = _context_value(request, *source_keys)
+        if value not in (None, ""):
+            context[target_key] = str(value)
+    return context
+
+
+def build_signer_invocation_payload(request: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the full stdin payload sent to the private local signer command."""
+
+    signer_request = dict(build_blackbox_signing_payload(request))
+    body = _request_body(request)
+    if body is not None:
+        signer_request["body"] = body
+        body_data = _body_bytes(body)
+        if body_data is not None:
+            signer_request["body_sha256"] = hashlib.sha256(body_data).hexdigest()
+    signer_request["context"] = _collect_context(request)
+    return {"schema_version": 1, "request": signer_request}
 
 
 def _extract_signed_headers(blackbox_result: Mapping[str, Any]) -> dict[str, str]:
@@ -142,12 +198,12 @@ def sign_with_supplied_result(
 
 
 def _run_provider_command(command: str, request: Mapping[str, Any]) -> dict[str, Any]:
-    argv = shlex.split(command)
+    argv = shlex.split(command, posix=os.name != "nt")
     if not argv:
         raise BlackboxSignatureUnavailable("empty blackbox provider command")
     completed = subprocess.run(
         argv,
-        input=json.dumps({"request": request}, ensure_ascii=False),
+        input=json.dumps(build_signer_invocation_payload(request), ensure_ascii=False),
         capture_output=True,
         text=True,
         check=False,
@@ -185,7 +241,11 @@ def _select_case(data: dict[str, Any], case_name: str | None) -> dict[str, Any]:
     raise ValueError(f"case not found: {case_name}")
 
 
-def sign_input(data: Mapping[str, Any], provider_command: str | None = None) -> dict[str, Any]:
+def sign_input(
+    data: Mapping[str, Any],
+    provider_command: str | None = None,
+    sdu_command: str | None = None,
+) -> dict[str, Any]:
     request = data.get("request", data)
     if not isinstance(request, Mapping):
         raise ValueError("request must be a JSON object")
@@ -194,8 +254,15 @@ def sign_input(data: Mapping[str, Any], provider_command: str | None = None) -> 
     if isinstance(blackbox_result, Mapping):
         return sign_with_supplied_result(request, blackbox_result)
 
-    command = provider_command or os.environ.get("PUPUSGN_BLACKBOX_CMD")
-    if command:
+    command = (
+        sdu_command
+        or provider_command
+        or data.get("sdu_command")
+        or data.get("signer_command")
+        or os.environ.get("PUPUSGN_SDU_CMD")
+        or os.environ.get("PUPUSGN_BLACKBOX_CMD")
+    )
+    if isinstance(command, str) and command:
         return _run_provider_command(command, request)
 
     raise BlackboxSignatureUnavailable("blackbox signature unavailable")
@@ -214,12 +281,20 @@ def main(argv: list[str] | None = None) -> int:
         "--provider-command",
         help="local command that returns black-box signed_headers JSON; env: PUPUSGN_BLACKBOX_CMD",
     )
+    parser.add_argument(
+        "--sdu-command",
+        help="local private signer/SDK command; env: PUPUSGN_SDU_CMD",
+    )
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     args = parser.parse_args(argv)
 
     try:
         data = _select_case(_read_input(args.input), args.case)
-        output = sign_input(data, provider_command=args.provider_command)
+        output = sign_input(
+            data,
+            provider_command=args.provider_command,
+            sdu_command=args.sdu_command,
+        )
         status = 0
     except BlackboxSignatureUnavailable as error:
         output = _error_payload(str(error))

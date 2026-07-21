@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-21",
+  "description": "stdin fixture for .local/bin/pupusgn when a private local sdu/signer command is supplied. Contains no real credentials and no precomputed signatures.",
+  "usage": {
+    "mac": [
+      "chmod +x .local/bin/pupusgn",
+      "PUPUSGN_SDU_CMD=/absolute/path/to/private-sdu .local/bin/pupusgn --input .local/pupusgn-sdu-input.json --case sdu_product_detail_popup --pretty",
+      "PUPUSGN_SDU_CMD=/absolute/path/to/private-sdu .local/bin/pupusgn --input .local/pupusgn-sdu-input.json --case sdu_cart_purchasing_product --pretty"
+    ]
+  },
+  "cases": [
+    {
+      "name": "sdu_product_detail_popup",
+      "route_kind": "protected_product_read",
+      "request": {
+        "method": "GET",
+        "path": "/client/product/storeproduct/detail_popup/<STORE_ID>/<STORE_PRODUCT_ID>",
+        "query": [
+          ["zip", "<CITY_ZIP>"],
+          ["lng", "<LONGITUDE_6DP>"],
+          ["lat", "<LATITUDE_6DP>"],
+          ["source", "product_detail"]
+        ],
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json;charset=utf-8",
+          "pp-version": "6.4.9",
+          "pp-os": "20",
+          "pp-deviceid": "<PP_DEVICE_ID>",
+          "pp-userid": "<USER_ID>",
+          "pp-suid": "<SUID>",
+          "pp-storeid": "<STORE_ID>",
+          "pp-placeid": "<PLACE_ID>",
+          "pp-time": "<TIMESTAMP_MS>",
+          "user-agent": "pupu-android/6.4.9 redacted"
+        },
+        "context": {
+          "app_version": "6.4.9",
+          "os_type": "20",
+          "pp_device_id": "<PP_DEVICE_ID>",
+          "user_id": "<USER_ID>",
+          "su_id": "<SUID>",
+          "store_id": "<STORE_ID>",
+          "place_id": "<PLACE_ID>",
+          "city_zip": "<CITY_ZIP>"
+        }
+      },
+      "expected_sdu_input": {
+        "schema_version": 1,
+        "request_fields": ["method", "path", "query", "headers", "context"]
+      },
+      "expected_output_headers": ["seal", "sign-v3", "pp-seqid", "pp-time"]
+    },
+    {
+      "name": "sdu_cart_purchasing_product",
+      "route_kind": "shopping_cart_purchase_fixture",
+      "request": {
+        "method": "POST",
+        "path": "/client/shopping_cart/shopping_cart_item/bff/purchasing_product",
+        "query": [
+          ["store_id", "<STORE_ID>"],
+          ["place_id", "<PLACE_ID>"],
+          ["zip", "<CITY_ZIP>"],
+          ["purchase_pattern", "normal"]
+        ],
+        "body": {
+          "items": [
+            {
+              "store_product_id": "<STORE_PRODUCT_ID>",
+              "product_id": "<PRODUCT_ID>",
+              "quantity": 1,
+              "type": "NORMAL",
+              "selected": true
+            }
+          ],
+          "page_source": "product_detail",
+          "return_data_type": 0
+        },
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json;charset=utf-8",
+          "pp-version": "6.4.9",
+          "pp-os": "20",
+          "pp-deviceid": "<PP_DEVICE_ID>",
+          "pp-userid": "<USER_ID>",
+          "pp-suid": "<SUID>",
+          "pp-storeid": "<STORE_ID>",
+          "pp-placeid": "<PLACE_ID>",
+          "pp-time": "<TIMESTAMP_MS>",
+          "user-agent": "pupu-android/6.4.9 redacted"
+        },
+        "context": {
+          "app_version": "6.4.9",
+          "os_type": "20",
+          "pp_device_id": "<PP_DEVICE_ID>",
+          "user_id": "<USER_ID>",
+          "su_id": "<SUID>",
+          "store_id": "<STORE_ID>",
+          "place_id": "<PLACE_ID>",
+          "city_zip": "<CITY_ZIP>"
+        }
+      },
+      "expected_sdu_input": {
+        "schema_version": 1,
+        "request_fields": ["method", "path", "query", "body", "body_sha256", "headers", "context"]
+      },
+      "expected_output_headers": ["seal", "sign-v3", "pp-seqid", "pp-time"]
+    }
+  ]
+}

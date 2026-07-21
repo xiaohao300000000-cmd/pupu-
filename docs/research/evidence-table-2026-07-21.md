@@ -45,4 +45,4 @@
 
 | Area | Evidence | Conclusion | Verification |
 |---|---|---|---|
-| Black-box signer wrapper | `.local/bin/pupusgn`, `.local/pupusgn-test.json`, `.local/pupu-cases.json` | Implemented as offline placeholder/result-merger; no real credentials or network I/O | `py -3.12 -m pytest tests/integrations/pupu/test_blackbox_signer.py -q` |
+| Black-box signer wrapper | `.local/bin/pupusgn`, `.local/pupusgn-test.json`, `.local/pupusgn-sdu-input.json`, `.local/pupu-cases.json` | Implemented as offline placeholder/result-merger plus stdin-to-local-sdu bridge; no real credentials or network I/O | `py -3.12 -m pytest tests/integrations/pupu/test_blackbox_signer.py -q` |

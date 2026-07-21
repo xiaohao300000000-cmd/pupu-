@@ -5,14 +5,17 @@ This note documents the offline signer materials added after the static `seal/si
 ## Files committed
 
 - `.local/bin/pupusgn` - Mac/Linux runnable Python entrypoint. It reads JSON from stdin or `--input`, writes JSON to stdout, and does not send HTTP requests.
-- `.local/pupusgn-test.json` - redacted signer fixture with two runnable cases:
+- `.local/pupusgn-test.json` - redacted supplied-result signer fixture with two runnable cases:
   - `protected_read_product_detail_popup`
   - `business_write_cart_purchasing_product`
+- `.local/pupusgn-sdu-input.json` - redacted stdin-to-local-sdu fixture with no precomputed signatures:
+  - `sdu_product_detail_popup`
+  - `sdu_cart_purchasing_product`
 - `.local/pupu-cases.json` - redacted route catalog for product reads, cart reads, and cart add/update candidates.
 - `src/pupu_assistant/integrations/pupu/blackbox_signer.py` - parser, validator, supplied-result merger, optional local provider-command adapter.
 - `tests/integrations/pupu/test_blackbox_signer.py` - fail-closed, merge, CLI, and fixture redaction tests.
 
-`.gitignore` now keeps generic `.local/*` ignored, but explicitly allows only the three committed signer files above. Local evidence, private runtime inputs, credentials, APKs, and hook captures remain ignored.
+`.gitignore` now keeps generic `.local/*` ignored, but explicitly allows only the four committed signer files above. Local evidence, private runtime inputs, credentials, APKs, and hook captures remain ignored.
 
 ## Contract
 
@@ -84,7 +87,37 @@ PUPUSGN_BLACKBOX_CMD="/absolute/path/to/private-signer" \
   .local/bin/pupusgn --input .local/private/runtime-sign-input.json --pretty
 ```
 
-The wrapper itself still performs no network I/O; it only calls the local command and validates that the returned JSON contains at least one `seal`/`sign` header.
+Preferred local sdu/signer command mode for full stdin request signing:
+
+```bash
+PUPUSGN_SDU_CMD="/absolute/path/to/private-sdu" \
+  .local/bin/pupusgn --input .local/pupusgn-sdu-input.json --case sdu_product_detail_popup --pretty
+
+.local/bin/pupusgn \
+  --input .local/pupusgn-sdu-input.json \
+  --case sdu_cart_purchasing_product \
+  --sdu-command "/absolute/path/to/private-sdu" \
+  --pretty
+```
+
+In sdu mode the wrapper sends this stdin shape to the private command:
+
+```json
+{
+  "schema_version": 1,
+  "request": {
+    "method": "POST",
+    "path": "/client/...",
+    "query": [["store_id", "<STORE_ID>"]],
+    "body": {"items": [{"store_product_id": "<STORE_PRODUCT_ID>"}]},
+    "body_sha256": "<computed-by-wrapper>",
+    "headers": {"pp-deviceid": "<PP_DEVICE_ID>"},
+    "context": {"pp_device_id": "<PP_DEVICE_ID>", "user_id": "<USER_ID>"}
+  }
+}
+```
+
+The private command must return JSON containing `signed_headers` or `headers` with at least one `seal`/`sign` header. The wrapper itself still performs no network I/O; it only calls the local command and validates that the returned JSON contains at least one `seal`/`sign` header.
 
 ## Route notes from 6.4.9 Hermes
 

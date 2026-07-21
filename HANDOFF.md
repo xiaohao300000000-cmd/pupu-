@@ -84,7 +84,9 @@ py -3.12 scripts/validate_pupu_public.py
 ## Black-box signer materials added on 2026-07-21
 
 - Added `.local/bin/pupusgn` as an offline Mac/Linux CLI wrapper. It accepts stdin or `--input`, supports `--case` for fixture files, writes signed headers to stdout, and returns `network_performed=false`.
-- Added `.local/pupusgn-test.json` with two placeholder-only cases: `protected_read_product_detail_popup` and `business_write_cart_purchasing_product`.
+- Added `.local/pupusgn-test.json` with two placeholder-only supplied-result cases: `protected_read_product_detail_popup` and `business_write_cart_purchasing_product`.
+- Added `.local/pupusgn-sdu-input.json` with two stdin-to-local-sdu cases: `sdu_product_detail_popup` and `sdu_cart_purchasing_product`; no precomputed signatures are stored.
 - Added `.local/pupu-cases.json` with redacted 6.4.9 product/cart request shapes and a placeholder allowed test merchant/product slot.
 - Added `src/pupu_assistant/integrations/pupu/blackbox_signer.py` plus tests. No real device/account/header/signature values are committed.
 - If the user supplies Hook/black-box output later, put it in an ignored private runtime JSON and run `.local/bin/pupusgn`; do not replace fail-closed protected signing in production until a signed vector has been verified.
+- For a real local signer/SDK bridge, run `.local/bin/pupusgn --sdu-command /path/to/private-sdu` or set `PUPUSGN_SDU_CMD`; the wrapper passes full method/path/query/body/headers/context through stdin and performs no HTTP requests itself.
