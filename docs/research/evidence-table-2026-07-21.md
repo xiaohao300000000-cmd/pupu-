@@ -40,3 +40,9 @@
 - `ppAppSecret` / `ppOs` 的真实值
 - native 层的最终输出格式
 - 服务端可验证的真实只读签名回放结果
+
+## 2026-07-21 black-box signer fixture
+
+| Area | Evidence | Conclusion | Verification |
+|---|---|---|---|
+| Black-box signer wrapper | `.local/bin/pupusgn`, `.local/pupusgn-test.json`, `.local/pupu-cases.json` | Implemented as offline placeholder/result-merger; no real credentials or network I/O | `py -3.12 -m pytest tests/integrations/pupu/test_blackbox_signer.py -q` |

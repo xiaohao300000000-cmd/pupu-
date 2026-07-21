@@ -4,7 +4,12 @@
 .ruff_cache/
 __pycache__/
 .env
-.local/
+.local/*
+!.local/bin/
+.local/bin/*
+!.local/bin/pupusgn
+!.local/pupusgn-test.json
+!.local/pupu-cases.json
 .tools/
 *.apk
 *.xapk

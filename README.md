@@ -101,3 +101,11 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 ## 许可与来源
 
 项目会优先复用可用的 GitHub 模块，但任何复制代码都必须保留来源和许可证。`cddjr/check` 当前仅作协议研究上游；已发现其 MIT License 与 README 中的限制表述存在口径冲突，商业使用前需另行确认。
+
+
+## Black-box signer fixture path
+
+- `.local/bin/pupusgn` is a committed offline Mac/Linux signer wrapper. It reads JSON, merges supplied black-box `seal/sign` headers, writes JSON to stdout, and performs no HTTP requests.
+- `.local/pupusgn-test.json` contains two redacted runnable cases: one protected product read and one cart write fixture.
+- `.local/pupu-cases.json` records current 6.4.9 product/cart candidate routes with placeholder-only method/path/query/body shapes.
+- Details: [Black-box Pupu signer materials](docs/research/blackbox-signer-materials-2026-07-21.md)

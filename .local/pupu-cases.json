@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-21",
+  "description": "Redacted request catalog for wiring private black-box signature captures into the Pupu assistant. No real credential material is stored here.",
+  "runtime_placeholders": {
+    "app_version": "6.4.9",
+    "pp_os": "20",
+    "pp_device_id": "<PP_DEVICE_ID>",
+    "user_id": "<USER_ID>",
+    "suid": "<SUID>",
+    "store_id": "<STORE_ID>",
+    "place_id": "<PLACE_ID>",
+    "city_zip": "<CITY_ZIP>",
+    "timestamp_ms": "<TIMESTAMP_MS>",
+    "seq_id": "<SEQ_ID_FROM_BLACKBOX>"
+  },
+  "allowed_test_merchant": {
+    "store_id": "<STORE_ID>",
+    "store_name": "<REDACTED_STORE_NAME>",
+    "product_id": "<PRODUCT_ID>",
+    "store_product_id": "<STORE_PRODUCT_ID>",
+    "product_name": "<REDACTED_PRODUCT_NAME>",
+    "quantity": 1,
+    "notes": "Use a low-risk single item selected by the account owner; replace placeholders only in private runtime input files."
+  },
+  "shared_headers": {
+    "accept": "application/json",
+    "content-type": "application/json;charset=utf-8",
+    "pp-version": "6.4.9",
+    "pp-os": "20",
+    "pp-deviceid": "<PP_DEVICE_ID>",
+    "pp-userid": "<USER_ID>",
+    "pp-suid": "<SUID>",
+    "pp-storeid": "<STORE_ID>",
+    "pp-placeid": "<PLACE_ID>",
+    "pp-time": "<TIMESTAMP_MS>",
+    "user-agent": "pupu-android/6.4.9 redacted"
+  },
+  "routes": [
+    {
+      "name": "product_unit_price_detail",
+      "purpose": "protected product read",
+      "method": "GET",
+      "path": "/client/product/storeproduct/unit_price/detail/<STORE_PRODUCT_ID>",
+      "query": [["zip", "<CITY_ZIP>"], ["store_id", "<STORE_ID>"]],
+      "body": null,
+      "signature_input_fields": ["method", "path", "query", "headers", "timestamp_ms", "pp_device_id", "user_id", "city_zip"]
+    },
+    {
+      "name": "product_detail_popup",
+      "purpose": "protected product read",
+      "method": "GET",
+      "path": "/client/product/storeproduct/detail_popup/<STORE_ID>/<STORE_PRODUCT_ID>",
+      "query": [["zip", "<CITY_ZIP>"], ["lng", "<LONGITUDE_6DP>"], ["lat", "<LATITUDE_6DP>"]],
+      "body": null,
+      "signature_input_fields": ["method", "path", "query", "headers", "timestamp_ms", "pp_device_id", "user_id", "city_zip"]
+    },
+    {
+      "name": "cart_recommend_info",
+      "purpose": "shopping cart read candidate",
+      "method": "GET",
+      "path": "/client/shopping_cart/shopping_cart/bff/recommend_info",
+      "query": [["store_id", "<STORE_ID>"], ["place_id", "<PLACE_ID>"], ["zip", "<CITY_ZIP>"]],
+      "body": null,
+      "signature_input_fields": ["method", "path", "query", "headers", "timestamp_ms", "pp_device_id", "user_id", "store_id"]
+    },
+    {
+      "name": "cart_init_piecing_page_desc",
+      "purpose": "shopping cart read candidate",
+      "method": "GET",
+      "path": "/client/shopping_cart/shopping_cart/init_piecing_page_desc",
+      "query": [["coupon_id", "<COUPON_ID_OR_EMPTY>"], ["page_source", "shopping_cart"], ["purchase_pattern", "normal"]],
+      "body": null,
+      "signature_input_fields": ["method", "path", "query", "headers", "timestamp_ms", "pp_device_id", "user_id"]
+    },
+    {
+      "name": "cart_purchasing_product",
+      "purpose": "shopping cart add or quantity write candidate",
+      "method": "POST",
+      "path": "/client/shopping_cart/shopping_cart_item/bff/purchasing_product",
+      "query": [["store_id", "<STORE_ID>"], ["place_id", "<PLACE_ID>"], ["zip", "<CITY_ZIP>"], ["purchase_pattern", "normal"]],
+      "body": {
+        "items": [
+          {
+            "store_product_id": "<STORE_PRODUCT_ID>",
+            "product_id": "<PRODUCT_ID>",
+            "quantity": 1,
+            "type": "NORMAL",
+            "selected": true
+          }
+        ],
+        "page_source": "product_detail",
+        "return_data_type": 0
+      },
+      "signature_input_fields": ["method", "path", "query", "body_sha256", "headers", "timestamp_ms", "pp_device_id", "user_id", "store_id"]
+    },
+    {
+      "name": "cart_purchasing_product_batch",
+      "purpose": "shopping cart batch write candidate",
+      "method": "POST",
+      "path": "/client/shopping_cart/shopping_cart_item/bff/purchasing_product/batch",
+      "query": [["store_id", "<STORE_ID>"], ["place_id", "<PLACE_ID>"], ["zip", "<CITY_ZIP>"], ["purchase_pattern", "normal"]],
+      "body": {
+        "items": [
+          {
+            "store_product_id": "<STORE_PRODUCT_ID>",
+            "product_id": "<PRODUCT_ID>",
+            "quantity": 1,
+            "type": "NORMAL",
+            "selected": true
+          }
+        ],
+        "page_source": "shopping_cart",
+        "return_data_type": 0
+      },
+      "signature_input_fields": ["method", "path", "query", "body_sha256", "headers", "timestamp_ms", "pp_device_id", "user_id", "store_id"]
+    },
+    {
+      "name": "cart_selection_status",
+      "purpose": "shopping cart item selected-state update candidate",
+      "method": "PUT",
+      "path": "/client/shopping_cart/shopping_cart_item/bff/selection_status",
+      "query": [["item_id", "<CART_ITEM_ID>"], ["is_selected", "true"], ["purchase_pattern", "normal"]],
+      "body": null,
+      "signature_input_fields": ["method", "path", "query", "headers", "timestamp_ms", "pp_device_id", "user_id", "store_id"]
+    },
+    {
+      "name": "cart_selection_status_all",
+      "purpose": "shopping cart all-item selected-state update candidate",
+      "method": "PUT",
+      "path": "/client/shopping_cart/shopping_cart_item/bff/selection_status_all",
+      "query": [["is_selected", "true"], ["purchase_pattern", "normal"], ["pocket_type", "normal"]],
+      "body": null,
+      "signature_input_fields": ["method", "path", "query", "headers", "timestamp_ms", "pp_device_id", "user_id", "store_id"]
+    }
+  ],
+  "field_notes": {
+    "method": "Uppercase HTTP method observed in Hermes request wrapper.",
+    "path": "Path only, no scheme or host. Java domain is selected by the app request layer.",
+    "query": "Ordered key/value pairs. Keep runtime ordering exactly as captured when validating signatures.",
+    "body_sha256": "For committed fixtures, store only SHA-256 or structural body; keep raw runtime body in private files.",
+    "headers": "Use lower-case keys in tooling. Merge black-box signed headers after preserving original request headers.",
+    "pp_device_id": "Runtime-only device identifier placeholder.",
+    "user_id": "Runtime-only account identifier placeholder.",
+    "city_zip": "Runtime city or place zip placeholder.",
+    "timestamp_ms": "Runtime millisecond timestamp; the black-box signer may replace or confirm pp-time.",
+    "signed_headers": "Expected black-box output includes one or more of seal, seal-v2, seal-v3, sign-v2, sign-v3 plus pp-time and pp-seqid."
+  }
+}

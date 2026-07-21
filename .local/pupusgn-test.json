@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-07-21",
+  "description": "Redacted offline fixtures for .local/bin/pupusgn. Values in angle brackets are placeholders and must be replaced only in private runtime files.",
+  "usage": {
+    "mac": [
+      "chmod +x .local/bin/pupusgn",
+      ".local/bin/pupusgn --input .local/pupusgn-test.json --case protected_read_product_detail_popup --pretty",
+      ".local/bin/pupusgn --input .local/pupusgn-test.json --case business_write_cart_purchasing_product --pretty"
+    ]
+  },
+  "cases": [
+    {
+      "name": "protected_read_product_detail_popup",
+      "route_kind": "protected_read",
+      "source_hint": "Hermes 6.4.9 withSecSign GET route: /client/product/storeproduct/detail_popup/...",
+      "request": {
+        "method": "GET",
+        "path": "/client/product/storeproduct/detail_popup/<STORE_ID>/<STORE_PRODUCT_ID>",
+        "query": [
+          ["zip", "<CITY_ZIP>"],
+          ["lng", "<LONGITUDE_6DP>"],
+          ["lat", "<LATITUDE_6DP>"],
+          ["source", "product_detail"]
+        ],
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json;charset=utf-8",
+          "pp-version": "6.4.9",
+          "pp-os": "20",
+          "pp-deviceid": "<PP_DEVICE_ID>",
+          "pp-userid": "<USER_ID>",
+          "pp-suid": "<SUID>",
+          "pp-storeid": "<STORE_ID>",
+          "pp-placeid": "<PLACE_ID>",
+          "pp-time": "<TIMESTAMP_MS>",
+          "user-agent": "pupu-android/6.4.9 redacted"
+        },
+        "app_version": "6.4.9",
+        "os_type": "20",
+        "pp_device_id": "<PP_DEVICE_ID>",
+        "user_id": "<USER_ID>",
+        "store_id": "<STORE_ID>",
+        "city_zip": "<CITY_ZIP>"
+      },
+      "blackbox_result": {
+        "signed_headers": {
+          "pp-time": "<TIMESTAMP_MS>",
+          "pp-seqid": "<BLACKBOX_SEQID_READ>",
+          "seal": "<BLACKBOX_SEAL_READ>",
+          "seal-v2": "<BLACKBOX_SEAL_V2_READ>",
+          "seal-v3": "<BLACKBOX_SEAL_V3_READ>",
+          "sign-v2": "<BLACKBOX_SIGN_V2_READ>",
+          "sign-v3": "<BLACKBOX_SIGN_V3_READ>"
+        },
+        "metadata": {
+          "source": "supplied_hook_capture_redacted",
+          "network_performed_by_pupusgn": "false"
+        }
+      },
+      "expected_output": {
+        "ok": true,
+        "network_performed": false,
+        "signature_mode": "seal_sign",
+        "required_signed_headers": ["seal", "sign-v3", "pp-seqid", "pp-time"]
+      }
+    },
+    {
+      "name": "business_write_cart_purchasing_product",
+      "route_kind": "business_write_fixture_only",
+      "source_hint": "Hermes 6.4.9 POST route: /client/shopping_cart/shopping_cart_item/bff/purchasing_product",
+      "request": {
+        "method": "POST",
+        "path": "/client/shopping_cart/shopping_cart_item/bff/purchasing_product",
+        "query": [
+          ["store_id", "<STORE_ID>"],
+          ["place_id", "<PLACE_ID>"],
+          ["zip", "<CITY_ZIP>"],
+          ["purchase_pattern", "normal"]
+        ],
+        "body": {
+          "items": [
+            {
+              "store_product_id": "<STORE_PRODUCT_ID>",
+              "product_id": "<PRODUCT_ID>",
+              "quantity": 1,
+              "type": "NORMAL",
+              "selected": true
+            }
+          ],
+          "page_source": "product_detail",
+          "return_data_type": 0
+        },
+        "headers": {
+          "accept": "application/json",
+          "content-type": "application/json;charset=utf-8",
+          "pp-version": "6.4.9",
+          "pp-os": "20",
+          "pp-deviceid": "<PP_DEVICE_ID>",
+          "pp-userid": "<USER_ID>",
+          "pp-suid": "<SUID>",
+          "pp-storeid": "<STORE_ID>",
+          "pp-placeid": "<PLACE_ID>",
+          "pp-time": "<TIMESTAMP_MS>",
+          "user-agent": "pupu-android/6.4.9 redacted"
+        },
+        "app_version": "6.4.9",
+        "os_type": "20",
+        "pp_device_id": "<PP_DEVICE_ID>",
+        "user_id": "<USER_ID>",
+        "store_id": "<STORE_ID>",
+        "city_zip": "<CITY_ZIP>"
+      },
+      "blackbox_result": {
+        "signed_headers": {
+          "pp-time": "<TIMESTAMP_MS>",
+          "pp-seqid": "<BLACKBOX_SEQID_WRITE>",
+          "seal": "<BLACKBOX_SEAL_WRITE>",
+          "seal-v2": "<BLACKBOX_SEAL_V2_WRITE>",
+          "seal-v3": "<BLACKBOX_SEAL_V3_WRITE>",
+          "sign-v2": "<BLACKBOX_SIGN_V2_WRITE>",
+          "sign-v3": "<BLACKBOX_SIGN_V3_WRITE>"
+        },
+        "metadata": {
+          "source": "supplied_hook_capture_redacted",
+          "network_performed_by_pupusgn": "false"
+        }
+      },
+      "expected_output": {
+        "ok": true,
+        "network_performed": false,
+        "signature_mode": "seal_sign",
+        "required_signed_headers": ["seal", "sign-v3", "pp-seqid", "pp-time"]
+      }
+    }
+  ]
+}
