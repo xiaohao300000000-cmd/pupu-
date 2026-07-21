@@ -30,6 +30,10 @@ from pupu_assistant.domain.purchase.session import (
     PurchaseSessionContext,
     PurchaseSessionSnapshot,
 )
+from pupu_assistant.domain.recipes import (
+    RecipeInventoryAdjustment,
+    RecipeInventoryService,
+)
 from pupu_assistant.integrations.llm.provider import LLMProvider
 
 
@@ -42,10 +46,12 @@ result. When essential information is missing, submit exactly one concise
 clarification question. Always call submit_purchase_understanding before answering.
 Treat household preferences and inventory as user-maintained context, not platform
 price or stock facts. For a recipe purchase, generate structured ingredient
-requirements after accounting for stated household inventory, or ask one question
-when servings or another essential constraint is missing. Do not call a platform API
-or request credentials. For an explicit preference or inventory update, submit only
-the corresponding structured changes; never modify memory during another intent."""
+requirements with required_amount and required_unit, or ask one question when
+servings or another essential constraint is missing. For a dish recommendation,
+submit no more than three structured options and never invent a platform price. Do not
+call a platform API or request credentials. For an explicit preference or inventory
+update, submit only the corresponding structured changes; never modify memory during
+another intent."""
 
 
 class SubmitPurchaseUnderstandingArguments(PurchaseUnderstanding):
@@ -131,11 +137,13 @@ class PurchaseUnderstandingWorkflow:
         sessions: PurchaseSessionService,
         max_tool_rounds: int,
         household_context: HouseholdMemoryProvider | None = None,
+        recipe_inventory: RecipeInventoryService | None = None,
     ) -> None:
         self._provider = provider
         self._sessions = sessions
         self._max_tool_rounds = max_tool_rounds
         self._household_context = household_context
+        self._recipe_inventory = recipe_inventory or RecipeInventoryService()
 
     async def start(
         self,
@@ -240,9 +248,42 @@ class PurchaseUnderstandingWorkflow:
         snapshot: PurchaseSessionSnapshot,
         understanding: PurchaseUnderstanding,
     ) -> PurchaseSessionSnapshot:
+        recipe_adjustment: RecipeInventoryAdjustment | None = None
+        local_response: str | None = None
+        dish_selection_question: str | None = None
+        if (
+            understanding.intent is PurchaseIntent.RECIPE_PURCHASE
+            and understanding.requirements
+            and understanding.clarification_question is None
+            and self._household_context is not None
+        ):
+            household = self._household_context.snapshot(user_id=snapshot.user_id)
+            recipe_adjustment = self._recipe_inventory.adjust_requirements(
+                requirements=understanding.requirements,
+                inventory=household.inventory,
+            )
+            understanding = understanding.model_copy(
+                update={"requirements": recipe_adjustment.requirements}
+            )
+            if not recipe_adjustment.requirements:
+                local_response = (
+                    "已知家庭库存已经覆盖这道菜的结构化原料需求，"
+                    "当前没有需要加入助手购物车的商品。"
+                )
+        if (
+            understanding.intent is PurchaseIntent.DISH_RECOMMENDATION
+            and understanding.dish_recommendations
+        ):
+            local_response = self._dish_recommendation_response(understanding)
+            dish_selection_question = (
+                f"{local_response}\n请选择 1、2 或 3，我再生成采购清单？"
+            )
+
         context = PurchaseSessionContext(
             original_request=snapshot.context.original_request,
-            pending_question=understanding.clarification_question,
+            pending_question=(
+                understanding.clarification_question or dish_selection_question
+            ),
             dish_name=understanding.dish_name,
             servings=understanding.servings,
             budget=understanding.budget,
@@ -251,10 +292,17 @@ class PurchaseUnderstandingWorkflow:
             clarification_history=snapshot.context.clarification_history,
             product_candidates=snapshot.context.product_candidates,
             previous_cart=snapshot.context.previous_cart,
+            recipe_adjustment=recipe_adjustment,
+            local_response=local_response,
         )
         machine = replace(snapshot.state_machine)
-        if understanding.clarification_question:
+        if context.pending_question:
             machine.await_clarification()
+        elif (
+            understanding.intent is PurchaseIntent.RECIPE_PURCHASE
+            and not understanding.requirements
+        ):
+            machine.complete_local_update()
         elif understanding.intent is PurchaseIntent.PREFERENCE_UPDATE:
             household_memory = self._require_household_memory()
             for change in understanding.preference_changes:
@@ -314,7 +362,27 @@ class PurchaseUnderstandingWorkflow:
         snapshot: PurchaseSessionSnapshot,
     ) -> UnderstandingResult:
         return UnderstandingResult(
-            message=agent_result.content,
+            message=snapshot.context.local_response or agent_result.content,
             tool_rounds=agent_result.tool_rounds,
             session=snapshot,
         )
+
+    @staticmethod
+    def _dish_recommendation_response(
+        understanding: PurchaseUnderstanding,
+    ) -> str:
+        lines = ["推荐以下菜品："]
+        for index, recommendation in enumerate(
+            understanding.dish_recommendations,
+            start=1,
+        ):
+            duration = (
+                f"，约 {recommendation.cooking_minutes} 分钟"
+                if recommendation.cooking_minutes is not None
+                else ""
+            )
+            lines.append(
+                f"{index}. {recommendation.name}{duration}：{recommendation.reason}"
+            )
+        lines.append("选择一道后，我再生成结构化原料和采购方案。")
+        return "\n".join(lines)

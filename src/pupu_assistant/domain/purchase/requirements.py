@@ -40,6 +40,8 @@ class PurchaseRequirement(BaseModel):
     keywords: tuple[str, ...] = Field(min_length=1)
     quantity: int = Field(default=1, ge=1)
     target_specification: str | None = None
+    required_amount: Decimal | None = Field(default=None, gt=0)
+    required_unit: str | None = None
     preferred_brands: tuple[str, ...] = ()
     excluded_brands: tuple[str, ...] = ()
     max_price: Decimal | None = Field(default=None, ge=0)
@@ -52,6 +54,24 @@ class PurchaseRequirement(BaseModel):
         if any(not keyword.strip() for keyword in value):
             raise ValueError("purchase keywords cannot be blank")
         return value
+
+    @model_validator(mode="after")
+    def require_complete_structured_amount(self) -> PurchaseRequirement:
+        if (self.required_amount is None) != (self.required_unit is None):
+            raise ValueError("required amount and unit must be provided together")
+        if self.required_unit is not None and not self.required_unit.strip():
+            raise ValueError("required unit cannot be blank")
+        return self
+
+
+class DishRecommendation(BaseModel):
+    """A meal idea without invented platform pricing or product facts."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    cooking_minutes: int | None = Field(default=None, ge=1)
 
 
 class PurchaseUnderstanding(BaseModel):
@@ -67,6 +87,10 @@ class PurchaseUnderstanding(BaseModel):
     budget: Decimal | None = Field(default=None, ge=0)
     preference_changes: tuple[PreferenceChange, ...] = ()
     inventory_changes: tuple[InventoryChange, ...] = ()
+    dish_recommendations: tuple[DishRecommendation, ...] = Field(
+        default=(),
+        max_length=3,
+    )
 
     @field_validator("clarification_question")
     @classmethod
@@ -88,6 +112,8 @@ class PurchaseUnderstanding(BaseModel):
             self.preference_changes or self.inventory_changes
         ):
             raise ValueError("clarification cannot also mutate household memory")
+        if self.clarification_question and self.dish_recommendations:
+            raise ValueError("clarification cannot also include dish recommendations")
         actionable_purchase_intents = {
             PurchaseIntent.SEARCH_PURCHASE,
             PurchaseIntent.BATCH_PURCHASE,
@@ -119,6 +145,17 @@ class PurchaseUnderstanding(BaseModel):
                 )
         elif self.inventory_changes:
             raise ValueError("inventory changes require inventory_update intent")
+        if self.intent is PurchaseIntent.DISH_RECOMMENDATION:
+            if self.requirements:
+                raise ValueError("dish recommendation cannot include purchase requirements")
+            if not self.dish_recommendations and self.clarification_question is None:
+                raise ValueError(
+                    "dish recommendation requires recommendations or clarification"
+                )
+        elif self.dish_recommendations:
+            raise ValueError(
+                "dish recommendations require dish_recommendation intent"
+            )
         return self
 
 

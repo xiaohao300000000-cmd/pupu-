@@ -11,6 +11,7 @@ from pupu_assistant.domain.purchase.requirements import (
     ProductCandidate,
     PurchaseUnderstanding,
 )
+from pupu_assistant.domain.recipes import RecipeInventoryAdjustment
 
 
 class PurchaseSessionContext(BaseModel):
@@ -28,6 +29,8 @@ class PurchaseSessionContext(BaseModel):
     clarification_history: tuple[ClarificationExchange, ...] = ()
     product_candidates: tuple[ProductCandidate, ...] = ()
     previous_cart: AssistantCart | None = None
+    recipe_adjustment: RecipeInventoryAdjustment | None = None
+    local_response: str | None = None
 
 
 class PurchaseSessionSnapshot(BaseModel):
