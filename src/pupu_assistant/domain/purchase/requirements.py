@@ -81,17 +81,18 @@ class PurchaseUnderstanding(BaseModel):
 
     @model_validator(mode="after")
     def require_actionable_purchase_input(self) -> PurchaseUnderstanding:
-        direct_purchase_intents = {
+        actionable_purchase_intents = {
             PurchaseIntent.SEARCH_PURCHASE,
             PurchaseIntent.BATCH_PURCHASE,
+            PurchaseIntent.RECIPE_PURCHASE,
         }
         if (
-            self.intent in direct_purchase_intents
+            self.intent in actionable_purchase_intents
             and not self.requirements
             and self.clarification_question is None
         ):
             raise ValueError(
-                "direct purchase intent requires requirements or clarification"
+                "purchase intent requires requirements or clarification"
             )
         return self
 

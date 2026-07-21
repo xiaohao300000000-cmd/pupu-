@@ -30,7 +30,10 @@ requirements. Never invent a product ID, price, stock value, store, order, or ca
 result. When essential information is missing, submit exactly one concise
 clarification question. Always call submit_purchase_understanding before answering.
 Treat household preferences and inventory as user-maintained context, not platform
-price or stock facts. Do not call a platform API or request credentials."""
+price or stock facts. For a recipe purchase, generate structured ingredient
+requirements after accounting for stated household inventory, or ask one question
+when servings or another essential constraint is missing. Do not call a platform API
+or request credentials."""
 
 
 class SubmitPurchaseUnderstandingArguments(PurchaseUnderstanding):
