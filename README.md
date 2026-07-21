@@ -95,6 +95,7 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 - [GitHub 上游审计](docs/research/pupu-signature-audit-2026-07-21.md)
 - [APK 元数据复核](docs/research/apk-metadata-review-2026-07-21.md)
 - [`seal/sign` 静态跟进](docs/research/seal-sign-static-followup-2026-07-21.md)
+- [`seal/sign` alternatives / signature cache](docs/research/seal-sign-alternatives-2026-07-22.md)
 - [复核证据表](docs/research/evidence-table-2026-07-21.md)
 - [当前交接说明](HANDOFF.md)
 
@@ -108,5 +109,18 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 - `.local/bin/pupusgn` is a committed offline Mac/Linux signer wrapper. It reads JSON, merges supplied black-box `seal/sign` headers, writes JSON to stdout, and performs no HTTP requests.
 - `.local/pupusgn-test.json` contains two redacted supplied-result cases: one protected product read and one cart write fixture.
 - `.local/pupusgn-sdu-input.json` contains two stdin-to-local-sdu cases with no precomputed signatures; it requires `--sdu-command` or `PUPUSGN_SDU_CMD`.
+- `.local/pupusgn-signature-cache.example.json` contains the exact-match cache shape for real signed headers captured from an authorized local client; use it with `--signature-cache` or `PUPUSGN_SIGNATURE_CACHE`.
 - `.local/pupu-cases.json` records current 6.4.9 product/cart candidate routes with placeholder-only method/path/query/body shapes.
 - Details: [Black-box Pupu signer materials](docs/research/blackbox-signer-materials-2026-07-21.md)
+
+Signature cache mode:
+
+```bash
+.local/bin/pupusgn \
+  --input .local/pupusgn-sdu-input.json \
+  --case sdu_product_detail_popup \
+  --signature-cache /absolute/path/to/private-signature-cache.json \
+  --pretty
+```
+
+This path only reuses exact matching real captured headers. It does not fake or recompute `seal/sign`; cache misses and expired entries fail closed.

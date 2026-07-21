@@ -1,6 +1,7 @@
 import json
 import subprocess
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,8 @@ import pytest
 from pupu_assistant.integrations.pupu.blackbox_signer import (
     BlackboxSignatureUnavailable,
     build_blackbox_signing_payload,
+    request_fingerprint,
+    sign_with_signature_cache,
     sign_with_supplied_result,
 )
 
@@ -73,6 +76,79 @@ def test_build_blackbox_signing_payload_redacts_body_and_preserves_shape() -> No
     assert normalized["headers"]["pp-deviceid"] == "<PP_DEVICE_ID>"
 
 
+def test_request_fingerprint_is_stable_and_body_safe() -> None:
+    request = minimal_payload() | {"body": {"secret_like": "<LOCAL_ONLY>", "quantity": 1}}
+    fingerprint = request_fingerprint(request)
+
+    assert fingerprint.startswith("sha256:")
+    assert request_fingerprint(request) == fingerprint
+    assert "<LOCAL_ONLY>" not in fingerprint
+
+
+def test_sign_with_signature_cache_returns_real_captured_headers(tmp_path: Path) -> None:
+    request = product_sdu_request()
+    cache = tmp_path / "signature-cache.json"
+    cache.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "request_fingerprint": request_fingerprint(request),
+                        "expires_at": (
+                            datetime.now(UTC) + timedelta(minutes=5)
+                        ).isoformat(),
+                        "signed_headers": {
+                            "seal-v3": "<REAL_CAPTURED_SEAL_V3>",
+                            "sign-v3": "<REAL_CAPTURED_SIGN_V3>",
+                            "pp-seqid": "<REAL_CAPTURED_SEQID>",
+                            "pp-time": "<TIMESTAMP_MS>",
+                        },
+                        "metadata": {"source": "manual_app_capture"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    signed = sign_with_signature_cache(request, cache)
+
+    assert signed["ok"] is True
+    assert signed["network_performed"] is False
+    assert signed["headers"]["seal-v3"] == "<REAL_CAPTURED_SEAL_V3>"
+    assert signed["headers"]["sign-v3"] == "<REAL_CAPTURED_SIGN_V3>"
+    assert signed["metadata"]["source"] == "manual_app_capture"
+    assert signed["metadata"]["request_fingerprint"] == request_fingerprint(request)
+
+
+def test_signature_cache_fails_closed_on_miss_and_expiry(tmp_path: Path) -> None:
+    request = product_sdu_request()
+    expired_cache = tmp_path / "expired-cache.json"
+    expired_cache.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "request_fingerprint": request_fingerprint(request),
+                        "expires_at": "2000-01-01T00:00:00Z",
+                        "signed_headers": {"seal": "<EXPIRED_SEAL>"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(BlackboxSignatureUnavailable, match="expired"):
+        sign_with_signature_cache(request, expired_cache)
+
+    miss_cache = tmp_path / "miss-cache.json"
+    miss_cache.write_text(json.dumps({"schema_version": 1, "entries": []}), encoding="utf-8")
+    with pytest.raises(BlackboxSignatureUnavailable, match="miss"):
+        sign_with_signature_cache(request, miss_cache)
+
+
 def test_pupusgn_cli_accepts_supplied_result_from_file(tmp_path: Path) -> None:
     fixture = tmp_path / "fixture.json"
     fixture.write_text(
@@ -113,6 +189,43 @@ def test_pupusgn_cli_fails_closed_without_blackbox_result() -> None:
     assert output["ok"] is False
     assert output["error"] == "blackbox_signature_unavailable"
     assert output["network_performed"] is False
+
+
+def test_pupusgn_cli_accepts_signature_cache(tmp_path: Path) -> None:
+    request = product_sdu_request()
+    cache = tmp_path / "signature-cache.json"
+    cache.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "entries": [
+                    {
+                        "request_fingerprint": request_fingerprint(request),
+                        "signed_headers": {
+                            "seal": "<CACHE_SEAL>",
+                            "sign-v3": "<CACHE_SIGN_V3>",
+                            "pp-seqid": "<CACHE_SEQID>",
+                            "pp-time": "<TIMESTAMP_MS>",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, ".local/bin/pupusgn", "--signature-cache", str(cache)],
+        input=json.dumps({"request": request}),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    output = json.loads(completed.stdout)
+    assert output["ok"] is True
+    assert output["network_performed"] is False
+    assert output["headers"]["seal"] == "<CACHE_SEAL>"
 
 
 def test_committed_pupusgn_fixture_contains_two_runnable_cases() -> None:

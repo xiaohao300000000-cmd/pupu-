@@ -90,3 +90,12 @@ py -3.12 scripts/validate_pupu_public.py
 - Added `src/pupu_assistant/integrations/pupu/blackbox_signer.py` plus tests. No real device/account/header/signature values are committed.
 - If the user supplies Hook/black-box output later, put it in an ignored private runtime JSON and run `.local/bin/pupusgn`; do not replace fail-closed protected signing in production until a signed vector has been verified.
 - For a real local signer/SDK bridge, run `.local/bin/pupusgn --sdu-command /path/to/private-sdu` or set `PUPUSGN_SDU_CMD`; the wrapper passes full method/path/query/body/headers/context through stdin and performs no HTTP requests itself.
+
+## Exact-match signature cache added on 2026-07-22
+
+- Added `request_fingerprint()` and signature-cache lookup to `blackbox_signer.py`.
+- Added `.local/bin/pupusgn --signature-cache <path>` and `PUPUSGN_SIGNATURE_CACHE`.
+- Added `.local/pupusgn-signature-cache.example.json` with placeholder-only cache entries for the product-detail and cart-purchasing cases.
+- Cache mode returns real pre-captured signed headers only on exact request fingerprint match; it fails closed on cache miss or expiry.
+- Static APK probe confirms the 6.4.9 `classes.dex` has SecNeo-style appended payload markers (`dexdata0` at `0x9168`, `fdex` footer at `0x3320178`, pointer `0x915c`), so static algorithm recovery remains blocked on unpacking/runtime dump, not on a missing wrapper step.
+- Details: `docs/research/seal-sign-alternatives-2026-07-22.md`.

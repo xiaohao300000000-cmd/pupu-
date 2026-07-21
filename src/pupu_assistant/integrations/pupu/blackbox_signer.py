@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import sys
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ SIGNATURE_HEADER_NAMES = frozenset(
         "x-pupu-signature-value",
     }
 )
+SIGNATURE_ARTIFACT_HEADER_NAMES = SIGNATURE_HEADER_NAMES | frozenset({"pp-seqid"})
 
 
 class BlackboxSignatureUnavailable(RuntimeError):
@@ -164,6 +166,25 @@ def build_signer_invocation_payload(request: Mapping[str, Any]) -> dict[str, Any
     return {"schema_version": 1, "request": signer_request}
 
 
+def request_fingerprint(request: Mapping[str, Any]) -> str:
+    """Return a secret-free exact-match fingerprint for a signed request.
+
+    The fingerprint includes method, path, query, normalized non-signature
+    headers, context, and the body SHA-256. It never stores raw request bodies.
+    """
+
+    normalized = build_blackbox_signing_payload(request)
+    headers = normalized.get("headers")
+    if isinstance(headers, Mapping):
+        normalized["headers"] = {
+            str(name).lower(): str(value)
+            for name, value in headers.items()
+            if str(name).lower() not in SIGNATURE_ARTIFACT_HEADER_NAMES
+        }
+    digest = hashlib.sha256(_canonical_json_bytes(normalized)).hexdigest()
+    return f"sha256:{digest}"
+
+
 def _extract_signed_headers(blackbox_result: Mapping[str, Any]) -> dict[str, str]:
     headers = blackbox_result.get("signed_headers", blackbox_result.get("headers"))
     signed_headers = _normalize_headers(headers if isinstance(headers, Mapping) else None)
@@ -219,6 +240,55 @@ def _run_provider_command(command: str, request: Mapping[str, Any]) -> dict[str,
     return sign_with_supplied_result(request, payload)
 
 
+def _parse_expiry(value: Any) -> datetime | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise BlackboxSignatureUnavailable("signature cache entry has invalid expiry")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise BlackboxSignatureUnavailable("signature cache entry has invalid expiry") from error
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def sign_with_signature_cache(
+    request: Mapping[str, Any],
+    cache_path: str | os.PathLike[str],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Merge real, pre-captured signed headers from an exact-match cache."""
+
+    cache = json.loads(Path(cache_path).read_text(encoding="utf-8"))
+    if not isinstance(cache, Mapping):
+        raise BlackboxSignatureUnavailable("signature cache must be a JSON object")
+    entries = cache.get("entries")
+    if not isinstance(entries, list):
+        raise BlackboxSignatureUnavailable("signature cache entries must be a list")
+
+    fingerprint = request_fingerprint(request)
+    current_time = (now or datetime.now(UTC)).astimezone(UTC)
+    for entry in entries:
+        if not isinstance(entry, Mapping) or entry.get("request_fingerprint") != fingerprint:
+            continue
+        expires_at = _parse_expiry(entry.get("expires_at"))
+        if expires_at is not None and expires_at <= current_time:
+            raise BlackboxSignatureUnavailable("signature cache entry expired")
+        signed_headers = entry.get("signed_headers", entry.get("headers"))
+        metadata = dict(entry.get("metadata") or {})
+        metadata.setdefault("source", "signature_cache")
+        metadata["request_fingerprint"] = fingerprint
+        return sign_with_supplied_result(
+            request,
+            {"signed_headers": signed_headers, "metadata": metadata},
+        )
+
+    raise BlackboxSignatureUnavailable("signature cache miss")
+
+
 def _read_input(path: str | None) -> dict[str, Any]:
     raw = Path(path).read_text(encoding="utf-8") if path else sys.stdin.read()
     data = json.loads(raw)
@@ -245,6 +315,7 @@ def sign_input(
     data: Mapping[str, Any],
     provider_command: str | None = None,
     sdu_command: str | None = None,
+    signature_cache: str | None = None,
 ) -> dict[str, Any]:
     request = data.get("request", data)
     if not isinstance(request, Mapping):
@@ -264,6 +335,15 @@ def sign_input(
     )
     if isinstance(command, str) and command:
         return _run_provider_command(command, request)
+
+    cache_path = (
+        signature_cache
+        or data.get("signature_cache")
+        or data.get("signature_cache_path")
+        or os.environ.get("PUPUSGN_SIGNATURE_CACHE")
+    )
+    if isinstance(cache_path, str) and cache_path:
+        return sign_with_signature_cache(request, cache_path)
 
     raise BlackboxSignatureUnavailable("blackbox signature unavailable")
 
@@ -285,6 +365,13 @@ def main(argv: list[str] | None = None) -> int:
         "--sdu-command",
         help="local private signer/SDK command; env: PUPUSGN_SDU_CMD",
     )
+    parser.add_argument(
+        "--signature-cache",
+        help=(
+            "exact-match cache with real pre-captured signed headers; "
+            "env: PUPUSGN_SIGNATURE_CACHE"
+        ),
+    )
     parser.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     args = parser.parse_args(argv)
 
@@ -294,6 +381,7 @@ def main(argv: list[str] | None = None) -> int:
             data,
             provider_command=args.provider_command,
             sdu_command=args.sdu_command,
+            signature_cache=args.signature_cache,
         )
         status = 0
     except BlackboxSignatureUnavailable as error:

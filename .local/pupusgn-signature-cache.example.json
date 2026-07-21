@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "description": "Exact-match cache shape for real headers captured from an authorized local client. Values here are placeholders only.",
+  "entries": [
+    {
+      "name": "sdu_product_detail_popup",
+      "request_fingerprint": "sha256:4f1a32f2b77302f37ec48621f2473f53e0e465d279163dee0732e14171cd56c7",
+      "expires_at": null,
+      "signed_headers": {
+        "seal-v3": "<REAL_CAPTURED_SEAL_V3>",
+        "sign-v3": "<REAL_CAPTURED_SIGN_V3>",
+        "pp-seqid": "<REAL_CAPTURED_SEQID>",
+        "pp-time": "<TIMESTAMP_MS>"
+      },
+      "metadata": {
+        "source": "authorized_local_app_capture",
+        "case": "sdu_product_detail_popup"
+      }
+    },
+    {
+      "name": "sdu_cart_purchasing_product",
+      "request_fingerprint": "sha256:ab729fa7ca3762de1c56224a5752113853d3e95c66aada2ca8565773639cffbf",
+      "expires_at": null,
+      "signed_headers": {
+        "seal-v3": "<REAL_CAPTURED_SEAL_V3>",
+        "sign-v3": "<REAL_CAPTURED_SIGN_V3>",
+        "pp-seqid": "<REAL_CAPTURED_SEQID>",
+        "pp-time": "<TIMESTAMP_MS>"
+      },
+      "metadata": {
+        "source": "authorized_local_app_capture",
+        "case": "sdu_cart_purchasing_product"
+      }
+    }
+  ]
+}
