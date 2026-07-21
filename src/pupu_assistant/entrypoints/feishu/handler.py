@@ -213,7 +213,10 @@ class FeishuPurchaseHandler:
                 return self._card_result(
                     event.event_id,
                     snapshot,
-                    "商品已删除，助手购物车现在为空；请重新描述要购买的商品。",
+                    (
+                        "商品已删除，助手购物车现在为空；"
+                        "请重新描述要购买的商品。"
+                    ),
                 )
             snapshot = self._return_to_confirmation(
                 snapshot,
@@ -255,7 +258,10 @@ class FeishuPurchaseHandler:
                 return FeishuHandlerResult(
                     event_id=event.event_id,
                     task_id=action.task_id,
-                    reply_text="替代商品已不在当前候选中，请刷新采购方案后重试。",
+                    reply_text=(
+                        "替代商品已不在当前候选中，"
+                        "请刷新采购方案后重试。"
+                    ),
                     duplicate=False,
                     reply_card=render_assistant_cart_card(
                         AssistantCartCardView.from_session(snapshot)
@@ -363,6 +369,13 @@ class FeishuPurchaseHandler:
                 reply_text=snapshot.context.pending_question or result.message,
                 duplicate=False,
             )
+        if snapshot.state_machine.state is PurchaseState.COMPLETED:
+            return FeishuHandlerResult(
+                event_id=event_id,
+                task_id=snapshot.task_id,
+                reply_text=result.message,
+                duplicate=False,
+            )
         try:
             planned = await self._planning.plan(
                 task_id=snapshot.task_id,
@@ -392,7 +405,10 @@ class FeishuPurchaseHandler:
     @staticmethod
     def _active_task_reply(state: PurchaseState) -> str:
         if state is PurchaseState.AWAITING_CONFIRMATION:
-            return "当前采购方案正在等待确认，请使用方案卡片进行修改或确认。"
+            return (
+                "当前采购方案正在等待确认，"
+                "请使用方案卡片进行修改或确认。"
+            )
         if state is PurchaseState.AUTH_REQUIRED:
             return "当前任务需要重新授权朴朴账号，采购方案已保留。"
         return f"当前采购任务仍在处理中，状态：{state.value}。"

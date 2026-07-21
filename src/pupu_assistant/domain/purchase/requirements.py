@@ -6,6 +6,7 @@ from enum import StrEnum
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from pupu_assistant.domain.assistant_cart.models import ProductSnapshot
+from pupu_assistant.domain.household import InventoryChange, PreferenceChange
 
 
 class PurchaseIntent(StrEnum):
@@ -64,6 +65,8 @@ class PurchaseUnderstanding(BaseModel):
     dish_name: str | None = None
     servings: int | None = Field(default=None, ge=1)
     budget: Decimal | None = Field(default=None, ge=0)
+    preference_changes: tuple[PreferenceChange, ...] = ()
+    inventory_changes: tuple[InventoryChange, ...] = ()
 
     @field_validator("clarification_question")
     @classmethod
@@ -81,6 +84,10 @@ class PurchaseUnderstanding(BaseModel):
 
     @model_validator(mode="after")
     def require_actionable_purchase_input(self) -> PurchaseUnderstanding:
+        if self.clarification_question and (
+            self.preference_changes or self.inventory_changes
+        ):
+            raise ValueError("clarification cannot also mutate household memory")
         actionable_purchase_intents = {
             PurchaseIntent.SEARCH_PURCHASE,
             PurchaseIntent.BATCH_PURCHASE,
@@ -94,6 +101,24 @@ class PurchaseUnderstanding(BaseModel):
             raise ValueError(
                 "purchase intent requires requirements or clarification"
             )
+        if self.intent is PurchaseIntent.PREFERENCE_UPDATE:
+            if self.requirements:
+                raise ValueError("preference update cannot include purchase requirements")
+            if not self.preference_changes and self.clarification_question is None:
+                raise ValueError(
+                    "preference update requires changes or clarification"
+                )
+        elif self.preference_changes:
+            raise ValueError("preference changes require preference_update intent")
+        if self.intent is PurchaseIntent.INVENTORY_UPDATE:
+            if self.requirements:
+                raise ValueError("inventory update cannot include purchase requirements")
+            if not self.inventory_changes and self.clarification_question is None:
+                raise ValueError(
+                    "inventory update requires changes or clarification"
+                )
+        elif self.inventory_changes:
+            raise ValueError("inventory changes require inventory_update intent")
         return self
 
 

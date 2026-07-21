@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 
 class PreferenceType(StrEnum):
@@ -18,6 +18,46 @@ class PreferenceType(StrEnum):
     DISLIKED_INGREDIENT = "disliked_ingredient"
     SUBSTITUTION_POLICY = "substitution_policy"
     PRODUCT_ALIAS = "product_alias"
+
+
+class PreferenceChange(BaseModel):
+    """A user-requested preference mutation extracted from one message."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    preference_type: PreferenceType
+    target: str = Field(min_length=1)
+    value: JsonValue | None = None
+    delete: bool = False
+    confidence: Decimal = Field(default=Decimal("1"), ge=0, le=1)
+
+    @model_validator(mode="after")
+    def require_value_for_set(self) -> PreferenceChange:
+        if self.delete and self.value is not None:
+            raise ValueError("deleted preference cannot include a value")
+        if not self.delete and self.value is None:
+            raise ValueError("preference value is required")
+        return self
+
+
+class InventoryChange(BaseModel):
+    """A user-requested lightweight inventory mutation."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ingredient_name: str = Field(min_length=1)
+    quantity: Decimal | None = Field(default=None, ge=0)
+    unit: str | None = None
+    delete: bool = False
+    confidence: Decimal = Field(default=Decimal("1"), ge=0, le=1)
+
+    @model_validator(mode="after")
+    def require_quantity_and_unit_for_upsert(self) -> InventoryChange:
+        if self.delete and (self.quantity is not None or self.unit is not None):
+            raise ValueError("deleted inventory item cannot include quantity or unit")
+        if not self.delete and (self.quantity is None or not self.unit):
+            raise ValueError("inventory quantity and unit are required")
+        return self
 
 
 class UserPreference(BaseModel):

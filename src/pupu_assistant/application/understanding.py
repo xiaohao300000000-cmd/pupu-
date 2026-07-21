@@ -2,17 +2,28 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from typing import Protocol
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, JsonValue
 
-from pupu_assistant.application.orchestrator import AgentResult, PurchaseAgent
+from pupu_assistant.application.orchestrator import (
+    AgentResult,
+    PurchaseAgent,
+    PurchaseAgentError,
+)
 from pupu_assistant.application.purchase_sessions import PurchaseSessionService
 from pupu_assistant.application.state_machine import PurchaseState
 from pupu_assistant.application.tool_registry import ToolRegistry, ToolRisk, ToolSpec
-from pupu_assistant.domain.household import HouseholdContextSnapshot
+from pupu_assistant.domain.household import (
+    HouseholdContextSnapshot,
+    HouseholdInventoryItem,
+    PreferenceType,
+    UserPreference,
+)
 from pupu_assistant.domain.purchase.requirements import (
     ClarificationExchange,
+    PurchaseIntent,
     PurchaseUnderstanding,
 )
 from pupu_assistant.domain.purchase.session import (
@@ -33,7 +44,8 @@ Treat household preferences and inventory as user-maintained context, not platfo
 price or stock facts. For a recipe purchase, generate structured ingredient
 requirements after accounting for stated household inventory, or ask one question
 when servings or another essential constraint is missing. Do not call a platform API
-or request credentials."""
+or request credentials. For an explicit preference or inventory update, submit only
+the corresponding structured changes; never modify memory during another intent."""
 
 
 class SubmitPurchaseUnderstandingArguments(PurchaseUnderstanding):
@@ -48,8 +60,49 @@ class ClarificationNotExpected(RuntimeError):
     pass
 
 
-class HouseholdContextProvider(Protocol):
+class HouseholdMemoryProvider(Protocol):
     def snapshot(self, *, user_id: str) -> HouseholdContextSnapshot: ...
+
+    def set_preference(
+        self,
+        *,
+        user_id: str,
+        preference_type: PreferenceType,
+        target: str,
+        value: JsonValue,
+        confidence: Decimal,
+        source: str,
+    ) -> UserPreference: ...
+
+    def delete_preference(
+        self,
+        *,
+        user_id: str,
+        preference_type: PreferenceType,
+        target: str,
+    ) -> bool: ...
+
+    def upsert_inventory_item(
+        self,
+        *,
+        user_id: str,
+        ingredient_name: str,
+        quantity: Decimal,
+        unit: str,
+        confidence: Decimal,
+        source: str,
+    ) -> HouseholdInventoryItem: ...
+
+    def delete_inventory_item(
+        self,
+        *,
+        user_id: str,
+        ingredient_name: str,
+    ) -> bool: ...
+
+
+class HouseholdMemoryUnavailable(PurchaseAgentError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -77,7 +130,7 @@ class PurchaseUnderstandingWorkflow:
         provider: LLMProvider,
         sessions: PurchaseSessionService,
         max_tool_rounds: int,
-        household_context: HouseholdContextProvider | None = None,
+        household_context: HouseholdMemoryProvider | None = None,
     ) -> None:
         self._provider = provider
         self._sessions = sessions
@@ -182,8 +235,8 @@ class PurchaseUnderstandingWorkflow:
         self._sessions.save_progress(updated)
         return self._result(agent_result, updated)
 
-    @staticmethod
     def _apply_understanding(
+        self,
         snapshot: PurchaseSessionSnapshot,
         understanding: PurchaseUnderstanding,
     ) -> PurchaseSessionSnapshot:
@@ -201,11 +254,58 @@ class PurchaseUnderstandingWorkflow:
         machine = replace(snapshot.state_machine)
         if understanding.clarification_question:
             machine.await_clarification()
+        elif understanding.intent is PurchaseIntent.PREFERENCE_UPDATE:
+            household_memory = self._require_household_memory()
+            for change in understanding.preference_changes:
+                if change.delete:
+                    household_memory.delete_preference(
+                        user_id=snapshot.user_id,
+                        preference_type=change.preference_type,
+                        target=change.target,
+                    )
+                else:
+                    assert change.value is not None
+                    household_memory.set_preference(
+                        user_id=snapshot.user_id,
+                        preference_type=change.preference_type,
+                        target=change.target,
+                        value=change.value,
+                        confidence=change.confidence,
+                        source="user",
+                    )
+            machine.complete_local_update()
+        elif understanding.intent is PurchaseIntent.INVENTORY_UPDATE:
+            household_memory = self._require_household_memory()
+            for change in understanding.inventory_changes:
+                if change.delete:
+                    household_memory.delete_inventory_item(
+                        user_id=snapshot.user_id,
+                        ingredient_name=change.ingredient_name,
+                    )
+                else:
+                    assert change.quantity is not None
+                    assert change.unit is not None
+                    household_memory.upsert_inventory_item(
+                        user_id=snapshot.user_id,
+                        ingredient_name=change.ingredient_name,
+                        quantity=change.quantity,
+                        unit=change.unit,
+                        confidence=change.confidence,
+                        source="user",
+                    )
+            machine.complete_local_update()
         else:
             machine.gather_context()
         return snapshot.model_copy(
             update={"context": context, "state_machine": machine}
         )
+
+    def _require_household_memory(self) -> HouseholdMemoryProvider:
+        if self._household_context is None:
+            raise HouseholdMemoryUnavailable(
+                "Household memory is not configured for this runtime"
+            )
+        return self._household_context
 
     @staticmethod
     def _result(

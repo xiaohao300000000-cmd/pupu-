@@ -79,6 +79,12 @@ class PurchaseStateMachine:
             },
         )
 
+    def complete_local_update(self) -> None:
+        self._transition(
+            PurchaseState.COMPLETED,
+            from_states={PurchaseState.UNDERSTANDING},
+        )
+
     def begin_search(self) -> None:
         self._transition(
             PurchaseState.SEARCHING,
