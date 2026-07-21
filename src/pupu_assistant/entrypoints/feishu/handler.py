@@ -15,6 +15,10 @@ from pupu_assistant.application.planning import (
     PurchasePlanningWorkflow,
 )
 from pupu_assistant.application.purchase_sessions import PurchaseSessionService
+from pupu_assistant.application.repurchase import (
+    RepurchasePlanningError,
+    RepurchaseWorkflow,
+)
 from pupu_assistant.application.state_machine import (
     InvalidPurchaseTransition,
     PurchaseState,
@@ -23,6 +27,7 @@ from pupu_assistant.application.understanding import (
     PurchaseUnderstandingWorkflow,
     UnderstandingResult,
 )
+from pupu_assistant.domain.purchase.requirements import PurchaseIntent
 from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
 from pupu_assistant.entrypoints.feishu.cards import (
     AssistantCartCardView,
@@ -71,12 +76,14 @@ class FeishuPurchaseHandler:
         sessions: PurchaseSessionService,
         events: EventDedupRepository,
         cart_revision: CartRevisionWorkflow | None = None,
+        repurchase: RepurchaseWorkflow | None = None,
     ) -> None:
         self._understanding = understanding
         self._planning = planning
         self._sessions = sessions
         self._events = events
         self._cart_revision = cart_revision
+        self._repurchase = repurchase
 
     async def handle_text(self, message: FeishuTextMessage) -> FeishuHandlerResult:
         claimed = self._events.claim(
@@ -419,11 +426,36 @@ class FeishuPurchaseHandler:
                 duplicate=False,
             )
         try:
+            if (
+                snapshot.context.understanding is not None
+                and snapshot.context.understanding.intent is PurchaseIntent.REPURCHASE
+            ):
+                if self._repurchase is None:
+                    raise RepurchasePlanningError(
+                        "repurchase workflow is not configured"
+                    )
+                repurchased = await self._repurchase.plan_previous_day(
+                    task_id=snapshot.task_id,
+                    user_id=snapshot.user_id,
+                )
+                return FeishuHandlerResult(
+                    event_id=event_id,
+                    task_id=snapshot.task_id,
+                    reply_text=repurchased.message,
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(repurchased.session)
+                    ),
+                )
             planned = await self._planning.plan(
                 task_id=snapshot.task_id,
                 user_id=snapshot.user_id,
             )
-        except (PurchasePlanningError, PupuConnectorError) as error:
+        except (
+            PurchasePlanningError,
+            RepurchasePlanningError,
+            PupuConnectorError,
+        ) as error:
             return FeishuHandlerResult(
                 event_id=event_id,
                 task_id=snapshot.task_id,

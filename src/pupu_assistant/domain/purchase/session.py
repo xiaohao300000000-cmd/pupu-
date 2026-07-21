@@ -12,6 +12,7 @@ from pupu_assistant.domain.purchase.requirements import (
     PurchaseUnderstanding,
 )
 from pupu_assistant.domain.recipes import RecipeInventoryAdjustment
+from pupu_assistant.domain.repurchase import RepurchasePlan
 
 
 class PurchaseSessionContext(BaseModel):
@@ -31,6 +32,7 @@ class PurchaseSessionContext(BaseModel):
     previous_cart: AssistantCart | None = None
     recipe_adjustment: RecipeInventoryAdjustment | None = None
     local_response: str | None = None
+    repurchase_plan: RepurchasePlan | None = None
 
 
 class PurchaseSessionSnapshot(BaseModel):
