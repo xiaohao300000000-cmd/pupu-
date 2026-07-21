@@ -1,5 +1,7 @@
 package com.pupu.harness;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.github.unidbg.AndroidEmulator;
 import com.github.unidbg.Emulator;
 import com.github.unidbg.arm.Arm64Svc;
@@ -22,9 +24,12 @@ import com.github.unidbg.memory.SvcMemory;
 import com.github.unidbg.pointer.UnidbgPointer;
 
 import java.io.File;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 public class PupuMixmasterHarness extends AbstractJni {
@@ -34,7 +39,7 @@ public class PupuMixmasterHarness extends AbstractJni {
     private final VM vm;
     private final DvmClass vortex;
 
-    private PupuMixmasterHarness(File libFile) {
+    private PupuMixmasterHarness(File libFile, boolean verbose) {
         emulator = AndroidEmulatorBuilder.for64Bit()
                 .setProcessName("com.pupumall.customer")
                 .addBackendFactory(new Unicorn2Factory(true))
@@ -48,13 +53,12 @@ public class PupuMixmasterHarness extends AbstractJni {
         classFactory.setFallbackJni(this);
         vm.setDvmClassFactory(classFactory);
         vm.setJni(this);
-        vm.setVerbose(true);
+        vm.setVerbose(verbose);
 
         DalvikModule dm = vm.loadLibrary(libFile, false);
         vortex = vm.resolveClass("com/pupumall/tinystack/Vortex");
         dm.callJNI_OnLoad(emulator);
     }
-
 
     private void registerAndroidNativeStubs(Memory memory) {
         SvcMemory svcMemory = emulator.getSvcMemory();
@@ -83,7 +87,7 @@ public class PupuMixmasterHarness extends AbstractJni {
         return svcMemory.registerSvc(new Arm64Svc(name) {
             @Override
             public long handle(Emulator<?> emulator) {
-                System.out.println("[stub] " + name + " => 0");
+                System.err.println("[stub] " + name + " => 0");
                 return 0;
             }
         });
@@ -93,7 +97,7 @@ public class PupuMixmasterHarness extends AbstractJni {
         return svcMemory.registerSvc(new Arm64Svc(name) {
             @Override
             public long handle(Emulator<?> emulator) {
-                System.out.println("[stub] " + name + " => " + value);
+                System.err.println("[stub] " + name + " => " + value);
                 return value;
             }
         });
@@ -103,11 +107,12 @@ public class PupuMixmasterHarness extends AbstractJni {
         return svcMemory.registerSvc(new Arm64Svc(name) {
             @Override
             public long handle(Emulator<?> emulator) {
-                System.out.println("[stub] " + name + " => 0x" + Long.toHexString(value));
+                System.err.println("[stub] " + name + " => 0x" + Long.toHexString(value));
                 return value;
             }
         });
     }
+
     private void close() throws Exception {
         emulator.close();
     }
@@ -135,7 +140,7 @@ public class PupuMixmasterHarness extends AbstractJni {
 
     @Override
     public DvmObject<?> callStaticObjectMethod(BaseVM vm, DvmClass dvmClass, String signature, VarArg varArg) {
-        System.out.println("[callStaticObjectMethod] " + signature);
+        System.err.println("[callStaticObjectMethod] " + signature);
         if ("android/app/ActivityThread->currentApplication()Landroid/app/Application;".equals(signature)) {
             return vm.resolveClass("android/app/Application").newObject("pupu-application-stub");
         }
@@ -144,7 +149,7 @@ public class PupuMixmasterHarness extends AbstractJni {
 
     @Override
     public DvmObject<?> callObjectMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList) {
-        System.out.println("[callObjectMethodV] " + signature + " this=" + dvmObject);
+        System.err.println("[callObjectMethodV] " + signature + " this=" + dvmObject);
         Object value = dvmObject == null ? null : dvmObject.getValue();
         if (signature.endsWith("->iterator()Ljava/util/Iterator;") && value instanceof Iterable) {
             return ProxyDvmObject.createObject(vm, ((Iterable<?>) value).iterator());
@@ -166,27 +171,34 @@ public class PupuMixmasterHarness extends AbstractJni {
         if (signature.endsWith("->getFilesDir()Ljava/io/File;") || signature.endsWith("->getCacheDir()Ljava/io/File;")) {
             return ProxyDvmObject.createObject(vm, new File("target/pupu-harness-files"));
         }
+        if (signature.endsWith("->getContentResolver()Landroid/content/ContentResolver;")) {
+            return vm.resolveClass("android/content/ContentResolver").newObject("pupu-content-resolver-stub");
+        }
         return super.callObjectMethodV(vm, dvmObject, signature, vaList);
     }
 
     @Override
     public boolean callBooleanMethodV(BaseVM vm, DvmObject<?> dvmObject, String signature, VaList vaList) {
-        System.out.println("[callBooleanMethodV] " + signature + " this=" + dvmObject);
+        System.err.println("[callBooleanMethodV] " + signature + " this=" + dvmObject);
         Object value = dvmObject == null ? null : dvmObject.getValue();
         if (signature.endsWith("->hasNext()Z") && value instanceof Iterator) {
             return ((Iterator<?>) value).hasNext();
         }
         return super.callBooleanMethodV(vm, dvmObject, signature, vaList);
     }
+
     @Override
     public DvmObject<?> callObjectMethod(BaseVM vm, DvmObject<?> dvmObject, String signature, VarArg varArg) {
-        System.out.println("[callObjectMethod] " + signature + " this=" + dvmObject);
+        System.err.println("[callObjectMethod] " + signature + " this=" + dvmObject);
         if ("android/content/Context->getPackageName()Ljava/lang/String;".equals(signature)) {
             return new StringObject(vm, "com.pupumall.customer");
         }
         if ("android/content/Context->getFilesDir()Ljava/io/File;".equals(signature)
                 || "android/content/Context->getCacheDir()Ljava/io/File;".equals(signature)) {
             return ProxyDvmObject.createObject(vm, new File("target/pupu-harness-files"));
+        }
+        if ("android/content/Context->getContentResolver()Landroid/content/ContentResolver;".equals(signature)) {
+            return vm.resolveClass("android/content/ContentResolver").newObject("pupu-content-resolver-stub");
         }
         if ("java/io/File->getAbsolutePath()Ljava/lang/String;".equals(signature)) {
             Object value = dvmObject.getValue();
@@ -197,7 +209,7 @@ public class PupuMixmasterHarness extends AbstractJni {
 
     @Override
     public int callIntMethod(BaseVM vm, DvmObject<?> dvmObject, String signature, VarArg varArg) {
-        System.out.println("[callIntMethod] " + signature + " this=" + dvmObject);
+        System.err.println("[callIntMethod] " + signature + " this=" + dvmObject);
         if ("java/util/HashMap->size()I".equals(signature) && dvmObject.getValue() instanceof Map) {
             return ((Map<?, ?>) dvmObject.getValue()).size();
         }
@@ -206,17 +218,100 @@ public class PupuMixmasterHarness extends AbstractJni {
 
     @Override
     public boolean callBooleanMethod(BaseVM vm, DvmObject<?> dvmObject, String signature, VarArg varArg) {
-        System.out.println("[callBooleanMethod] " + signature + " this=" + dvmObject);
+        System.err.println("[callBooleanMethod] " + signature + " this=" + dvmObject);
         return super.callBooleanMethod(vm, dvmObject, signature, varArg);
     }
 
-    public static void main(String[] args) throws Exception {
+    private static Map<String, String> stringMap(JSONObject object) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (object == null) {
+            return out;
+        }
+        for (String key : object.keySet()) {
+            Object value = object.get(key);
+            if (value != null) {
+                out.put(key.toLowerCase(), String.valueOf(value));
+            }
+        }
+        return out;
+    }
+
+    private static JSONObject requestObject(JSONObject payload) {
+        JSONObject request = payload.getJSONObject("request");
+        return request == null ? payload : request;
+    }
+
+    private static String firstString(JSONObject object, String fallback, String... keys) {
+        for (String key : keys) {
+            Object value = object.get(key);
+            if (value != null && !String.valueOf(value).isEmpty()) {
+                return String.valueOf(value);
+            }
+        }
+        return fallback;
+    }
+
+    private static String deviceFeed(JSONObject request) {
+        String direct = firstString(request, null, "device_feed", "deviceFeed", "pvrinoypdvc_dueri");
+        if (direct != null) {
+            return direct;
+        }
+        JSONObject context = request.getJSONObject("context");
+        if (context != null) {
+            return firstString(context, "{}", "device_feed", "deviceFeed", "pvrinoypdvc_dueri");
+        }
+        return "{}";
+    }
+
+    private static void runSignerMode(String[] args) throws Exception {
+        if (args.length < 3) {
+            throw new IllegalArgumentException("Usage: PupuMixmasterHarness --signer <libmixmaster.so> <input-json-file>");
+        }
+        PrintStream originalOut = System.out;
+        System.setOut(System.err);
+        JSONObject result = new JSONObject(true);
+        File lib = new File(args[1]).getCanonicalFile();
+        JSONObject payload = JSON.parseObject(Files.readString(new File(args[2]).toPath(), StandardCharsets.UTF_8));
+        JSONObject request = requestObject(payload);
+        String path = firstString(request, "", "path", "ah", "at", "url_path", "uri");
+        Map<String, String> headers = stringMap(request.getJSONObject("headers"));
+        if (headers.isEmpty()) {
+            headers = stringMap(request.getJSONObject("edr"));
+        }
+        PupuMixmasterHarness harness = new PupuMixmasterHarness(lib, false);
+        try {
+            harness.thrust();
+            String seal = harness.swindle(headers, path, deviceFeed(request));
+            if (seal == null || seal.isEmpty()) {
+                result.put("ok", false);
+                result.put("error", "mixmaster_swindle_empty");
+            } else {
+                JSONObject signedHeaders = new JSONObject(true);
+                signedHeaders.put("seal-v3", seal);
+                if (headers.containsKey("pp-time")) {
+                    signedHeaders.put("pp-time", headers.get("pp-time"));
+                }
+                JSONObject metadata = new JSONObject(true);
+                metadata.put("source", "unidbg_mixmaster");
+                metadata.put("path", path);
+                metadata.put("native", "libmixmaster.so");
+                result.put("signed_headers", signedHeaders);
+                result.put("metadata", metadata);
+            }
+        } finally {
+            harness.close();
+            System.setOut(originalOut);
+        }
+        originalOut.println(result.toJSONString());
+    }
+
+    private static void runSmokeMode(String[] args) throws Exception {
         if (args.length < 1) {
             throw new IllegalArgumentException("Usage: PupuMixmasterHarness <libmixmaster.so> [path] [deviceFeed]");
         }
         File lib = new File(args[0]).getCanonicalFile();
         System.out.println("[pupu] lib=" + lib);
-        PupuMixmasterHarness harness = new PupuMixmasterHarness(lib);
+        PupuMixmasterHarness harness = new PupuMixmasterHarness(lib, true);
         try {
             System.out.println("[pupu] JNI_OnLoad ok");
             harness.thrust();
@@ -226,11 +321,19 @@ public class PupuMixmasterHarness extends AbstractJni {
             headers.put("pp-seqid", "00000000-0000-0000-0000-000000000000");
             headers.put("user-agent", "pupu-harness");
             String path = args.length > 1 ? args[1] : "/client/product/storeproduct/detail";
-            String deviceFeed = args.length > 2 ? args[2] : "{}";
-            String seal = harness.swindle(headers, path, deviceFeed);
+            String feed = args.length > 2 ? args[2] : "{}";
+            String seal = harness.swindle(headers, path, feed);
             System.out.println("[pupu] swindle=" + seal);
         } finally {
             harness.close();
         }
+    }
+
+    public static void main(String[] args) throws Exception {
+        if (args.length > 0 && "--signer".equals(args[0])) {
+            runSignerMode(args);
+            return;
+        }
+        runSmokeMode(args);
     }
 }

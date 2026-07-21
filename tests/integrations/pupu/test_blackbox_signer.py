@@ -321,6 +321,61 @@ def cart_sdu_request() -> dict[str, object]:
     }
 
 
+def write_fake_mixmaster_signer(tmp_path: Path) -> tuple[Path, Path]:
+    signer = tmp_path / "fake_mixmaster_signer.py"
+    record = tmp_path / "seen-by-mixmaster.json"
+    signer.write_text(
+        """
+import json
+import sys
+from pathlib import Path
+
+record = Path(sys.argv[1])
+payload = json.load(sys.stdin)
+record.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+request = payload["request"]
+print(json.dumps({
+    "signed_headers": {
+        "seal-v3": (
+            "{\\\"s0\\\":\\\"\\\",\\\"s1\\\":\\\"\\\","
+            "\\\"s2\\\":\\\"<MIXMASTER_S2>\\\",\\\"s3\\\":\\\"\\\"}"
+        ),
+        "pp-time": request["headers"].get("pp-time", "<TIMESTAMP_MS>"),
+    },
+    "metadata": {"source": "fake_mixmaster", "path": request["path"]},
+}))
+""".lstrip(),
+        encoding="utf-8",
+    )
+    return signer, record
+
+
+def test_pupusgn_cli_accepts_mixmaster_command(tmp_path: Path) -> None:
+    signer, record = write_fake_mixmaster_signer(tmp_path)
+    command = f"{sys.executable} {signer} {record}"
+    request = product_sdu_request()
+
+    completed = subprocess.run(
+        [sys.executable, ".local/bin/pupusgn", "--mixmaster-command", command],
+        input=json.dumps({"request": request}),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    output = json.loads(completed.stdout)
+    seen_by_mixmaster = json.loads(record.read_text(encoding="utf-8"))
+    invoked = seen_by_mixmaster["request"]
+
+    assert output["ok"] is True
+    assert output["network_performed"] is False
+    assert output["headers"]["seal-v3"].startswith('{"s0"')
+    assert output["metadata"]["source"] == "fake_mixmaster"
+    assert invoked["method"] == request["method"]
+    assert invoked["path"] == request["path"]
+    assert invoked["headers"]["pp-deviceid"] == "<PP_DEVICE_ID>"
+
+
 def write_fake_sdu_signer(tmp_path: Path) -> tuple[Path, Path]:
     signer = tmp_path / "fake_sdu_signer.py"
     record = tmp_path / "seen-by-sdu.json"

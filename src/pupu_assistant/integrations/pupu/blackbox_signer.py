@@ -323,6 +323,7 @@ def sign_input(
     provider_command: str | None = None,
     sdu_command: str | None = None,
     signature_cache: str | None = None,
+    mixmaster_command: str | None = None,
 ) -> dict[str, Any]:
     request = data.get("request", data)
     if not isinstance(request, Mapping):
@@ -334,10 +335,13 @@ def sign_input(
 
     command = (
         sdu_command
+        or mixmaster_command
         or provider_command
         or data.get("sdu_command")
         or data.get("signer_command")
+        or data.get("mixmaster_command")
         or os.environ.get("PUPUSGN_SDU_CMD")
+        or os.environ.get("PUPUSGN_MIXMASTER_CMD")
         or os.environ.get("PUPUSGN_BLACKBOX_CMD")
     )
     if isinstance(command, str) and command:
@@ -373,6 +377,10 @@ def main(argv: list[str] | None = None) -> int:
         help="local private signer/SDK command; env: PUPUSGN_SDU_CMD",
     )
     parser.add_argument(
+        "--mixmaster-command",
+        help="local unidbg/libmixmaster signer command; env: PUPUSGN_MIXMASTER_CMD",
+    )
+    parser.add_argument(
         "--signature-cache",
         help=(
             "exact-match cache with real pre-captured signed headers; "
@@ -389,6 +397,7 @@ def main(argv: list[str] | None = None) -> int:
             provider_command=args.provider_command,
             sdu_command=args.sdu_command,
             signature_cache=args.signature_cache,
+            mixmaster_command=args.mixmaster_command,
         )
         status = 0
     except BlackboxSignatureUnavailable as error:
