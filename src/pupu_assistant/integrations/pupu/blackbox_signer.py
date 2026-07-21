@@ -25,7 +25,14 @@ SIGNATURE_HEADER_NAMES = frozenset(
         "x-pupu-signature-value",
     }
 )
-SIGNATURE_ARTIFACT_HEADER_NAMES = SIGNATURE_HEADER_NAMES | frozenset({"pp-seqid"})
+SIGNATURE_ARTIFACT_HEADER_NAMES = SIGNATURE_HEADER_NAMES | frozenset(
+    {
+        "pp-seqid",
+        "pp-time",
+        "x-pupu-signature-timestamp",
+        "x-pupu-signature-version",
+    }
+)
 
 
 class BlackboxSignatureUnavailable(RuntimeError):

@@ -160,6 +160,14 @@ Cache entry shape:
 }
 ```
 
+The Frida helper added on 2026-07-22 writes this private cache directly:
+
+```bash
+python scripts/capture_pupu_signatures.py
+```
+
+See `docs/research/pupu-frida-hook-capture-2026-07-22.md`.
+
 ## Route notes from 6.4.9 Hermes
 
 Static Hermes references used for the committed case catalog:

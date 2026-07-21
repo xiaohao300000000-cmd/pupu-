@@ -99,3 +99,13 @@ py -3.12 scripts/validate_pupu_public.py
 - Cache mode returns real pre-captured signed headers only on exact request fingerprint match; it fails closed on cache miss or expiry.
 - Static APK probe confirms the 6.4.9 `classes.dex` has SecNeo-style appended payload markers (`dexdata0` at `0x9168`, `fdex` footer at `0x3320178`, pointer `0x915c`), so static algorithm recovery remains blocked on unpacking/runtime dump, not on a missing wrapper step.
 - Details: `docs/research/seal-sign-alternatives-2026-07-22.md`.
+
+## Frida hook capture toolkit added on 2026-07-22
+
+- Added `scripts/frida/pupu_sign_capture.js` to observe OkHttp request construction, interceptor-chain requests, and known Pupu sign-related classes without modifying requests.
+- Added `scripts/capture_pupu_signatures.py` to spawn/attach the app through Frida and generate:
+  - redacted event log: `.local/evidence/pupu-frida-events.redacted.jsonl`
+  - private exact-match cache: `.local/private/pupusgn-signature-cache.json`
+- Added `src/pupu_assistant/integrations/pupu/hook_capture.py` and tests for hook event normalization, signature-header extraction, cache upsert, and redaction.
+- Current machine check still shows no connected adb device, so live hook capture has not been executed in this session.
+- Details: `docs/research/pupu-frida-hook-capture-2026-07-22.md`.

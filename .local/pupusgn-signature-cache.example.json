@@ -4,7 +4,7 @@
   "entries": [
     {
       "name": "sdu_product_detail_popup",
-      "request_fingerprint": "sha256:4f1a32f2b77302f37ec48621f2473f53e0e465d279163dee0732e14171cd56c7",
+      "request_fingerprint": "sha256:4ffe3bde31af8ff33d0717f1bbeeb763561e040e2286a60f01d8ec6d997e85d1",
       "expires_at": null,
       "signed_headers": {
         "seal-v3": "<REAL_CAPTURED_SEAL_V3>",
@@ -19,7 +19,7 @@
     },
     {
       "name": "sdu_cart_purchasing_product",
-      "request_fingerprint": "sha256:ab729fa7ca3762de1c56224a5752113853d3e95c66aada2ca8565773639cffbf",
+      "request_fingerprint": "sha256:d887da82ac798831a4f1c21ed1f6d09febbc1b53fc4787242e4cfa20e3fd5e79",
       "expires_at": null,
       "signed_headers": {
         "seal-v3": "<REAL_CAPTURED_SEAL_V3>",

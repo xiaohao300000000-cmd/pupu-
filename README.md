@@ -96,6 +96,7 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 - [APK 元数据复核](docs/research/apk-metadata-review-2026-07-21.md)
 - [`seal/sign` 静态跟进](docs/research/seal-sign-static-followup-2026-07-21.md)
 - [`seal/sign` alternatives / signature cache](docs/research/seal-sign-alternatives-2026-07-22.md)
+- [Frida hook capture workflow](docs/research/pupu-frida-hook-capture-2026-07-22.md)
 - [复核证据表](docs/research/evidence-table-2026-07-21.md)
 - [当前交接说明](HANDOFF.md)
 
@@ -124,3 +125,11 @@ Signature cache mode:
 ```
 
 This path only reuses exact matching real captured headers. It does not fake or recompute `seal/sign`; cache misses and expired entries fail closed.
+
+Frida capture mode:
+
+```bash
+python scripts/capture_pupu_signatures.py
+```
+
+This requires a connected Android device/emulator with Frida available. It writes redacted events to `.local/evidence/` and private signed-header cache entries to `.local/private/`, both ignored by Git.
