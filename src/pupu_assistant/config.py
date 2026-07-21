@@ -17,10 +17,18 @@ class Settings(BaseSettings):
     pupu_timeout_seconds: float = Field(default=20.0, gt=0)
     pupu_verify_tls: bool = True
     pupu_credentials_path: Path = Path(".local/pupu-credentials.json")
+    pupu_database_path: Path = Path(".local/pupu-assistant.db")
     pupu_evidence_path: Path = Path(".local/evidence")
     pupu_allow_live_mutation: bool = False
     pupu_app_version: str = "6.4.5"
     pupu_os_type: str = "Android"
+    pupusgn_blackbox_cmd: str | None = None
+
+    feishu_app_instance_name: str | None = None
+    feishu_app_id: str | None = None
+    feishu_app_secret: SecretStr | None = None
+    feishu_verification_token: SecretStr | None = None
+    feishu_encrypt_key: SecretStr | None = None
 
     llm_provider: str = "deepseek"
     llm_base_url: str = "https://api.deepseek.com"

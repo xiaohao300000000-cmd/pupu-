@@ -16,6 +16,8 @@
 | APK 签名方案 | 已验证 v1/v2/v3，证书 SHA-256 一致 | `keytool` / `jarsigner` / 自写 signing block 解析 | `artifacts/apk/apk-signing-block-detect.json`、`artifacts/apk/apk-signing-block-cert-extract.json`、`artifacts/apk/*keytool.txt` | 高 | `v31=false` |
 | APK 静态逆向入口 | 目前只见 SecNeo 壳，没见到可直接复用的 Java `seal/sign` | JADX / apktool / rg | `artifacts/decompiled/sources`、`artifacts/apk/Pupu-6.4.1/jadx/sources`、`artifacts/apk/pupu-6.4.9-downkuai-apktool/smali` | 高 | 仅见 `R.java` 与 `com/secneo/apkwrapper/*`；业务逻辑未直接裸露 |
 | 业务层签名辅助 | 已定位到一段像请求摘要/签名辅助的 JS 逻辑，但不是最终 `seal/sign` | Hermes / bundle 反编译（本地证据） | `artifacts/hbc649.index.decomp.js`、`artifacts/hbc649.common.decomp.js`、`artifacts/hbc649.decomp.js` | 中 | 线索包含 `pp_os`、`unique_id`、`secret`、`timestamp`，以及 `Object.keys(...).sort()` + `md5` |
+| Hermes `withSecSign` 请求级开关 | 已确认多个接口传入 `withSecSign: true`，请求包装层会把它透传到 native request config | Hermes / bundle 反编译行号复核 | `artifacts/hbc649.index.decomp.js:200105`、`:344334`、`:491860`、`:633048`、`:1796836-1796889` | 中 | 证明存在请求级签名开关；未证明 Hermes 层包含 `seal/sign` 算法 |
+| 壳后 payload `seal/sign` 字符串 | 已确认 payload 中存在 `HEADER_SEAL/HEADER_SIGN`、`seal-v2/v3`、`sign-v2/v3`、`pp-seqid/pp-time` 等字符串 | payload 字符串表 / 二进制扫描 | `artifacts/classes_payload_strings.txt`、`docs/research/seal-sign-static-followup-2026-07-21.md` | 中 | 字符串证明实现或校验路径存在，但不足以还原算法 |
 | native 层 | 已确认存在原生库，但还没打透 | 目录扫描 / 字符串初扫 | `artifacts/apk/pupu-6.4.9-downkuai-apktool/lib/**`、`artifacts/native-string-interesting-649.txt` | 中 | `libentryexpro.so`、`libppcurl.so` 还需继续分析 |
 | `cddjr/check` 请求头与身份参数 | 旧版代码中存在完整的若干请求头/Token 处理 | 固定提交逐行静态读取 | [`pupu_api.py#L48-L77`](https://github.com/cddjr/check/blob/a7da0d90a55a0b345b70dde1549591a69e2cd417/pupu_api.py#L48-L77)、[`#L80-L134`](https://github.com/cddjr/check/blob/a7da0d90a55a0b345b70dde1549591a69e2cd417/pupu_api.py#L80-L134) | 高 | 适用于旧版脚本自身，不是当前 APK 签名证明 |
 | `cddjr/check` HTTP 调用 | 直接组装 headers 并调用 HTTP session；无独立签名层 | 固定提交逐行检查 | [`pupu_api.py#L190-L223`](https://github.com/cddjr/check/blob/a7da0d90a55a0b345b70dde1549591a69e2cd417/pupu_api.py#L190-L223) | 高 | 未发现 `seal/sign` 生成器 |
@@ -38,3 +40,9 @@
 - `ppAppSecret` / `ppOs` 的真实值
 - native 层的最终输出格式
 - 服务端可验证的真实只读签名回放结果
+
+## 2026-07-21 black-box signer fixture
+
+| Area | Evidence | Conclusion | Verification |
+|---|---|---|---|
+| Black-box signer wrapper | `.local/bin/pupusgn`, `.local/pupusgn-test.json`, `.local/pupu-cases.json` | Implemented as offline placeholder/result-merger; no real credentials or network I/O | `py -3.12 -m pytest tests/integrations/pupu/test_blackbox_signer.py -q` |

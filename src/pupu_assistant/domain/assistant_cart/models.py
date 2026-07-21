@@ -11,6 +11,7 @@ class ProductSnapshot(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     product_id: str = Field(min_length=1)
+    store_product_id: str | None = None
     sku_id: str | None = None
     name: str = Field(min_length=1)
     specification: str = Field(min_length=1)
