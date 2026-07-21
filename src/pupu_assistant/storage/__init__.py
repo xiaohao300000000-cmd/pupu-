@@ -1,5 +1,8 @@
 """Persistence adapters for recoverable assistant state."""
 
+from pupu_assistant.storage.household_memory_repository import (
+    SqlAlchemyHouseholdMemoryRepository,
+)
 from pupu_assistant.storage.purchase_session_repository import (
     PurchaseSessionAlreadyExists,
     PurchaseSessionNotFound,
@@ -11,5 +14,6 @@ __all__ = [
     "PurchaseSessionAlreadyExists",
     "PurchaseSessionNotFound",
     "PurchaseSessionOwnershipConflict",
+    "SqlAlchemyHouseholdMemoryRepository",
     "SqlAlchemyPurchaseSessionRepository",
 ]

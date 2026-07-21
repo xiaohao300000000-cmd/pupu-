@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, replace
+from typing import Protocol
 
 from pydantic import ConfigDict
 
@@ -8,6 +10,7 @@ from pupu_assistant.application.orchestrator import AgentResult, PurchaseAgent
 from pupu_assistant.application.purchase_sessions import PurchaseSessionService
 from pupu_assistant.application.state_machine import PurchaseState
 from pupu_assistant.application.tool_registry import ToolRegistry, ToolRisk, ToolSpec
+from pupu_assistant.domain.household import HouseholdContextSnapshot
 from pupu_assistant.domain.purchase.requirements import (
     ClarificationExchange,
     PurchaseUnderstanding,
@@ -26,7 +29,8 @@ grocery purchase assistant. Convert the user's request into platform-independent
 requirements. Never invent a product ID, price, stock value, store, order, or cart
 result. When essential information is missing, submit exactly one concise
 clarification question. Always call submit_purchase_understanding before answering.
-Do not call a platform API or request credentials."""
+Treat household preferences and inventory as user-maintained context, not platform
+price or stock facts. Do not call a platform API or request credentials."""
 
 
 class SubmitPurchaseUnderstandingArguments(PurchaseUnderstanding):
@@ -39,6 +43,10 @@ class UnderstandingNotSubmitted(RuntimeError):
 
 class ClarificationNotExpected(RuntimeError):
     pass
+
+
+class HouseholdContextProvider(Protocol):
+    def snapshot(self, *, user_id: str) -> HouseholdContextSnapshot: ...
 
 
 @dataclass(frozen=True)
@@ -66,10 +74,12 @@ class PurchaseUnderstandingWorkflow:
         provider: LLMProvider,
         sessions: PurchaseSessionService,
         max_tool_rounds: int,
+        household_context: HouseholdContextProvider | None = None,
     ) -> None:
         self._provider = provider
         self._sessions = sessions
         self._max_tool_rounds = max_tool_rounds
+        self._household_context = household_context
 
     async def start(
         self,
@@ -133,6 +143,14 @@ class PurchaseUnderstandingWorkflow:
         snapshot: PurchaseSessionSnapshot,
         prompt: str,
     ) -> UnderstandingResult:
+        if self._household_context is not None:
+            household_context = self._household_context.snapshot(
+                user_id=snapshot.user_id
+            )
+            prompt = (
+                f"{prompt}\nHousehold context: "
+                f"{json.dumps(household_context.to_agent_context(), ensure_ascii=False)}"
+            )
         capture = _UnderstandingCapture()
         registry = ToolRegistry()
         registry.register(
