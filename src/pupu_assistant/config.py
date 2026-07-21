@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     pupu_allow_live_mutation: bool = False
     pupu_app_version: str = "6.4.5"
     pupu_os_type: str = "Android"
+    pupusgn_blackbox_cmd: str | None = None
 
     feishu_app_instance_name: str | None = None
     feishu_app_id: str | None = None

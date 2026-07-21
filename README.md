@@ -80,6 +80,7 @@ py -3.12 -m pytest -q
 PUPU_VERIFY_TLS=true
 PUPU_ALLOW_LIVE_MUTATION=false
 PUPU_DATABASE_PATH=.local/pupu-assistant.db
+PUPUSGN_BLACKBOX_CMD=
 FEISHU_APP_INSTANCE_NAME=
 FEISHU_APP_ID=
 FEISHU_APP_SECRET=
@@ -127,4 +128,5 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 - `.local/bin/pupusgn` is a committed offline Mac/Linux signer wrapper. It reads JSON, merges supplied black-box `seal/sign` headers, writes JSON to stdout, and performs no HTTP requests.
 - `.local/pupusgn-test.json` contains two redacted runnable cases: one protected product read and one cart write fixture.
 - `.local/pupu-cases.json` records current 6.4.9 product/cart candidate routes with placeholder-only method/path/query/body shapes.
+- `ExternalBlackboxSignatureService` can call the account owner's `PUPUSGN_BLACKBOX_CMD` and merge its signed headers into the existing fail-closed HTTP chain; it does not generate signatures itself.
 - Details: [Black-box Pupu signer materials](docs/research/blackbox-signer-materials-2026-07-21.md)
