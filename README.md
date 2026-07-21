@@ -16,6 +16,9 @@
 - 采购状态机：只有“确认版本一致 + 价格库存复核无变化”后才会暴露真实写入工具。
 - 两阶段写入核心：预览哈希、短期确认凭证、精确确认短语、一次性消费、幂等键和写后回读判定。
 - Windows 兼容的确认存储文件锁；全量测试当前 `62 passed`。
+- SQLite 采购会话仓库：按用户保存任务上下文、状态机、助手购物车、商品明细和操作幂等 ID，支持进程重启后恢复。
+
+> SQLite 持久化代码已实现，但按本轮用户指令未运行新增测试；上面的 `62 passed` 是持久化改动之前的基线，不代表本轮改动已经验证。
 
 ## 架构边界
 
@@ -66,6 +69,7 @@ py -3.12 -m pytest -q
 ```text
 PUPU_VERIFY_TLS=true
 PUPU_ALLOW_LIVE_MUTATION=false
+PUPU_DATABASE_PATH=.local/pupu-assistant.db
 LLM_PROVIDER=deepseek
 LLM_BASE_URL=https://api.deepseek.com
 LLM_MODEL=deepseek-v4-flash
@@ -80,6 +84,7 @@ LLM_MODEL=deepseek-v4-flash
 | 公开服务器时间 | 最近一次运行失败 | HTTP 成功、`errcode=0`、返回可用时间戳 |
 | DeepSeek 工具循环 | 单元测试已通过 | 尚未使用用户 API Key 进行真实请求 |
 | 助手购物车 | 单元测试已通过 | 本地版本、幂等和门店隔离 |
+| 任务/购物车 SQLite 恢复 | 已实现，本轮未测试 | 重启恢复、原子替换及 `task_id + user_id` 隔离仍待验证 |
 | 两阶段购物车控制 | 单元测试已通过 | 尚未接入朴朴真实购物车 Gateway |
 | 手机号登录 | 未验证 | 需要用户本人输入当次验证码 |
 | 受保护 `seal/sign` | 未验证 | 需要完整实现和真实请求向量 |
@@ -92,6 +97,7 @@ Mock 只用于单元测试，不会被记为真实朴朴验收结果。
 
 - [总体设计](docs/superpowers/specs/2026-07-21-pupu-assistant-design.md)
 - [签名与购物车实施计划](docs/superpowers/plans/2026-07-21-pupu-signature-and-cart-control.md)
+- [助手购物车持久化与恢复计划](docs/superpowers/plans/2026-07-21-assistant-cart-persistence-and-recovery.md)
 - [GitHub 上游审计](docs/research/pupu-signature-audit-2026-07-21.md)
 - [APK 元数据复核](docs/research/apk-metadata-review-2026-07-21.md)
 - [`seal/sign` 静态跟进](docs/research/seal-sign-static-followup-2026-07-21.md)

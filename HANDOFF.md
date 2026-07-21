@@ -2,7 +2,7 @@
 
 更新时间：2026-07-21
 
-开发分支：`codex/pupu-signature-cart-control`
+开发分支：`codex/assistant-cart-persistence`
 
 目标仓库：`xiaohao300000000-cmd/pupu-`
 
@@ -22,6 +22,7 @@
 10. Windows 兼容性修复：`ConfirmationStore` 改为跨平台文件锁，避免 `fcntl` 导致测试收集失败。
 11. APK 复核文档：两份 APK 元数据已核验，但 `seal/sign` 完整实现仍未得到。
 12. `seal/sign` 静态跟进：确认 Hermes `encryptionToParams` 只是业务参数 MD5 摘要；`withSecSign` 会透传到 native request config；payload 中存在 `HEADER_SEAL/HEADER_SIGN`、`seal-v2/v3`、`sign-v2/v3`、`pp-seqid/pp-time` 等线索，但仍缺完整算法和固定向量。
+13. SQLite 采购会话持久化：按 `task_id + user_id` 保存短期上下文、采购状态机、版本化助手购物车、商品明细和操作幂等 ID；保存使用单事务替换，避免旧商品残留。
 
 ## 真实验证边界
 
@@ -30,6 +31,7 @@
 | `GET https://j1.pupuapi.com/client/base/data` | 最近一次运行失败，未取得 HTTP/API 响应 |
 | DeepSeek Tool Calls | MockTransport 单元测试通过，未使用真实 API Key |
 | 助手购物车/状态机/确认存储 | 单元测试通过；Windows 文件锁已改为跨平台实现 |
+| SQLite 任务/购物车恢复 | 代码已实现；本轮遵照用户指令未运行新增测试，不能标记为已验证 |
 | APK 元数据 | 6.4.9 与 6.4.1 已核验，同一证书、v1/v2/v3 |
 | 受保护 `seal/sign` | 未得到完整实现，仍 fail-closed |
 | 真实认证请求 | 未验证 |
@@ -45,7 +47,7 @@
 py -3.12 -m pytest -q
 ```
 
-本轮结果：`62 passed in 0.77s`。
+持久化改动前基线：`62 passed`。本轮用户明确要求继续开发但不运行测试，因此没有持久化改动后的测试结果。
 
 真实公开请求：
 
@@ -65,10 +67,10 @@ py -3.12 scripts/validate_pupu_public.py
 
 ## 下一步
 
-1. 继续 native / Hermes 层定位 `ppAppSecret`、`ppOs` 与最终 `seal/sign` 输出格式；优先从运行时 dump 壳后 DEX/classes，找包含 `HEADER_SEAL`、`HEADER_SIGN`、`force_ctrl_seal_v3`、`trackSealInfo` 的类。
-2. 拿到一个 GET 向量和一个 POST 向量后，先写固定向量测试，再实现签名模块。
-3. 受保护请求签名得到真实向量验证后，再实现门店、商品和购物车 Gateway。
-4. 使用低风险单个商品执行 `preview → confirmation → execute → readback`。
+1. `seal/sign`、APK、Hook 和算法恢复由用户本人处理；本项目只接入用户提供的结果。
+2. 非逆向开发继续完成采购会话仓库与应用编排的连接，使助手购物车每次变更后保存、进程重启后恢复。
+3. 用户提供可调用 signer 和真实向量后，再实现门店、商品和购物车 Gateway。
+4. 受保护 Connector 可用后，按文档跑通“帮我买牛奶”的真实最小闭环，再接入飞书。
 5. 最终验收必须由用户在同账号朴朴手机 App 中确认商品和数量一致。
 
 ## 安全约束
