@@ -91,3 +91,12 @@ py -3.12 scripts/validate_pupu_public.py
 - `.env`、凭证、APK、`.local/`、`.tools/` 和验证证据不提交。
 - APK / native / bundle 原始产物只放在本地 `C:\Users\10579\work\pupu-audit\artifacts`，不进入 Git。
 - 飞书业务边界已开始实现；真实接入仍只允许新建应用，不修改、复用或接管任何现有配置。
+
+
+## Black-box signer materials added on 2026-07-21
+
+- Added `.local/bin/pupusgn` as an offline Mac/Linux CLI wrapper. It accepts stdin or `--input`, supports `--case` for fixture files, writes signed headers to stdout, and returns `network_performed=false`.
+- Added `.local/pupusgn-test.json` with two placeholder-only cases: `protected_read_product_detail_popup` and `business_write_cart_purchasing_product`.
+- Added `.local/pupu-cases.json` with redacted 6.4.9 product/cart request shapes and a placeholder allowed test merchant/product slot.
+- Added `src/pupu_assistant/integrations/pupu/blackbox_signer.py` plus tests. No real device/account/header/signature values are committed.
+- If the user supplies Hook/black-box output later, put it in an ignored private runtime JSON and run `.local/bin/pupusgn`; do not replace fail-closed protected signing in production until a signed vector has been verified.
