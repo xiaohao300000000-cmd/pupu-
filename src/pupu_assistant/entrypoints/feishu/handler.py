@@ -5,6 +5,10 @@ from typing import Protocol
 
 from pydantic import ValidationError
 
+from pupu_assistant.application.cart_revision import (
+    CartRevisionError,
+    CartRevisionWorkflow,
+)
 from pupu_assistant.application.orchestrator import PurchaseAgentError
 from pupu_assistant.application.planning import (
     PurchasePlanningError,
@@ -66,11 +70,13 @@ class FeishuPurchaseHandler:
         planning: PurchasePlanningWorkflow,
         sessions: PurchaseSessionService,
         events: EventDedupRepository,
+        cart_revision: CartRevisionWorkflow | None = None,
     ) -> None:
         self._understanding = understanding
         self._planning = planning
         self._sessions = sessions
         self._events = events
+        self._cart_revision = cart_revision
 
     async def handle_text(self, message: FeishuTextMessage) -> FeishuHandlerResult:
         claimed = self._events.claim(
@@ -102,6 +108,30 @@ class FeishuPurchaseHandler:
                     answer=message.text,
                 )
                 return await self._continue(result, event_id=message.event_id)
+            if (
+                active.state_machine.state in CART_INTERACTION_STATES
+                and self._cart_revision is not None
+            ):
+                revised = await self._cart_revision.revise(
+                    task_id=active.task_id,
+                    user_id=active.user_id,
+                    user_message=message.text,
+                    request_id=message.event_id,
+                )
+                reply_text = revised.message or (
+                    "助手购物车已更新。"
+                    if revised.changed
+                    else "助手购物车没有变化。"
+                )
+                return FeishuHandlerResult(
+                    event_id=message.event_id,
+                    task_id=revised.session.task_id,
+                    reply_text=reply_text,
+                    duplicate=False,
+                    reply_card=render_assistant_cart_card(
+                        AssistantCartCardView.from_session(revised.session)
+                    ),
+                )
             return FeishuHandlerResult(
                 event_id=message.event_id,
                 task_id=active.task_id,
@@ -116,7 +146,12 @@ class FeishuPurchaseHandler:
                     else None
                 ),
             )
-        except (PurchaseAgentError, DeepSeekError) as error:
+        except (
+            CartRevisionError,
+            InvalidPurchaseTransition,
+            PurchaseAgentError,
+            DeepSeekError,
+        ) as error:
             return FeishuHandlerResult(
                 event_id=message.event_id,
                 task_id=active.task_id if active else f"feishu:{message.message_id}",
