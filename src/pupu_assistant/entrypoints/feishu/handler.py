@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Protocol
 
+from pydantic import ValidationError
+
 from pupu_assistant.application.orchestrator import PurchaseAgentError
 from pupu_assistant.application.planning import (
     PurchasePlanningError,
@@ -17,17 +19,18 @@ from pupu_assistant.application.understanding import (
     PurchaseUnderstandingWorkflow,
     UnderstandingResult,
 )
-from pydantic import ValidationError
-
+from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
 from pupu_assistant.entrypoints.feishu.cards import (
+    AssistantCartCardView,
     CartCardAction,
     CartCardActionValue,
+    FeishuCardPayload,
+    render_assistant_cart_card,
 )
 from pupu_assistant.entrypoints.feishu.events import (
     FeishuTextMessage,
     LarkCliCardActionEvent,
 )
-from pupu_assistant.domain.purchase.session import PurchaseSessionSnapshot
 from pupu_assistant.integrations.llm.deepseek import DeepSeekError
 from pupu_assistant.integrations.pupu.connector import PupuConnectorError
 
@@ -44,6 +47,7 @@ class FeishuHandlerResult:
     task_id: str | None
     reply_text: str | None
     duplicate: bool
+    reply_card: FeishuCardPayload | None = None
 
 
 class FeishuPurchaseHandler:
@@ -182,7 +186,12 @@ class FeishuPurchaseHandler:
             machine.cancel()
             snapshot = snapshot.model_copy(update={"state_machine": machine})
             self._sessions.save_progress(snapshot)
-            return self._card_result(event.event_id, snapshot, "当前采购任务已取消。")
+            return FeishuHandlerResult(
+                event_id=event.event_id,
+                task_id=snapshot.task_id,
+                reply_text="当前采购任务已取消。",
+                duplicate=False,
+            )
         if action.action is CartCardAction.CONFIRM:
             return FeishuHandlerResult(
                 event_id=event.event_id,
@@ -227,6 +236,9 @@ class FeishuPurchaseHandler:
             task_id=snapshot.task_id,
             reply_text=planned.message,
             duplicate=False,
+            reply_card=render_assistant_cart_card(
+                AssistantCartCardView.from_session(planned.session)
+            ),
         )
 
     @staticmethod
@@ -258,4 +270,7 @@ class FeishuPurchaseHandler:
             task_id=snapshot.task_id,
             reply_text=reply_text,
             duplicate=False,
+            reply_card=render_assistant_cart_card(
+                AssistantCartCardView.from_session(snapshot)
+            ),
         )
