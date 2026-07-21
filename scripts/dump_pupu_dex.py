@@ -39,10 +39,13 @@ def run(args: argparse.Namespace) -> int:
         if message.get("type") != "send" or not isinstance(payload, dict):
             write_jsonl(events_path, {"frida": message})
             return
-        if payload.get("kind") == "dex_dump" and data:
+        if payload.get("kind") in {"dex_dump", "native_buffer_dump"} and data:
             digest = hashlib.sha256(data).hexdigest()
-            suffix = str(payload.get("magic") or "dex").replace("/", "_")
-            path = out_dir / f"{dump_count:03d}-{digest[:16]}-{suffix}.dex"
+            suffix = str(
+                payload.get("magic") or payload.get("marker") or "buffer"
+            ).replace("/", "_")
+            extension = "dex" if suffix in {"dex", "cdex"} else "bin"
+            path = out_dir / f"{dump_count:03d}-{digest[:16]}-{suffix}.{extension}"
             path.write_bytes(data)
             payload = dict(payload)
             payload["sha256"] = digest

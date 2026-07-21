@@ -21,6 +21,10 @@ dev = [
   "respx>=0.22,<1",
   "ruff>=0.12,<1",
 ]
+reverse = [
+  "gmssl>=3.2,<4",
+  "zstandard>=0.23,<1",
+]
 
 [project.scripts]
 pupu = "pupu_assistant.entrypoints.cli.main:app"

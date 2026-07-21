@@ -141,3 +141,20 @@ python scripts/dump_pupu_dex.py --duration 8
 ```
 
 This is for SecNeo/native-loader follow-up on an emulator or ARM runtime. Dumps are written only under ignored `.local/evidence/dex-dumps/`.
+
+Static SecNeo unpack mode:
+
+```powershell
+py -3.12 -m pip install zstandard gmssl
+py -3.12 scripts/unpack_secneo_pupu_dex.py `
+  --classes-dex C:\Users\10579\work\pupu-audit\artifacts\extract649\classes.dex `
+  --out .local\evidence\secneo-decrypted
+py -3.12 scripts/fix_secneo_stolen_code.py `
+  --input .local\evidence\secneo-decrypted `
+  --out .local\evidence\secneo-fixed-v2
+```
+
+This restores the protected DEX files and repairs SecNeo stolen code items for local analysis only.
+The recovered Java path shows `sign-v3`/`seal-v3` routing, while the final algorithms remain native in
+`libwindcharger.so`, `libmixmaster.so`, and AndJni-dispatched `JniLib` methods.
+Details: [Pupu SecNeo static unpack follow-up](docs/research/pupu-secneo-static-unpack-2026-07-22.md)
