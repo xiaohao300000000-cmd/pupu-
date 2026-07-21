@@ -333,6 +333,17 @@ class FeishuPurchaseHandler:
                 replacement=replacement,
                 operation_id=event.event_id,
             )
+            reasons = dict(snapshot.context.selection_reasons)
+            reasons.pop(action.product_id, None)
+            reasons[replacement.product_id] = "用户通过卡片选择替代商品"
+            context = snapshot.context.model_copy(
+                update={"selection_reasons": reasons}
+            )
+            snapshot = self._sessions.update_context(
+                task_id=snapshot.task_id,
+                user_id=snapshot.user_id,
+                context=context,
+            )
             snapshot = self._return_to_confirmation(
                 snapshot,
                 action_id=event.event_id,

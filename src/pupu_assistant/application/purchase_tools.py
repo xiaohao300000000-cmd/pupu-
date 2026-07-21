@@ -41,6 +41,7 @@ class ProductDetailArguments(BaseModel):
 class CartAddArguments(ProductDetailArguments):
     quantity: int = Field(ge=1)
     operation_id: str = Field(min_length=1)
+    selection_reason: str | None = Field(default=None, min_length=1)
 
 
 class CartQuantityArguments(BaseModel):
@@ -256,12 +257,26 @@ class PurchaseToolset:
             store_product_id=arguments.store_product_id,
         )
         self._record_product(product)
-        return self._sessions.add_product(
+        updated = self._sessions.add_product(
             task_id=self._task_id,
             user_id=self._user_id,
             product=product,
             quantity=arguments.quantity,
             operation_id=arguments.operation_id,
+        )
+        reason = arguments.selection_reason or "从当前任务的真实候选中选择"
+        context = updated.context.model_copy(
+            update={
+                "selection_reasons": {
+                    **updated.context.selection_reasons,
+                    product.product_id: reason,
+                }
+            }
+        )
+        return self._sessions.update_context(
+            task_id=self._task_id,
+            user_id=self._user_id,
+            context=context,
         ).cart
 
     def _set_quantity(self, arguments: CartQuantityArguments):

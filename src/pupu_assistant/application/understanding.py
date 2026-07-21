@@ -337,6 +337,7 @@ class PurchaseUnderstandingWorkflow:
             recipe_adjustment=recipe_adjustment,
             local_response=local_response,
             repurchase_plan=snapshot.context.repurchase_plan,
+            selection_reasons=snapshot.context.selection_reasons,
         )
         machine = replace(snapshot.state_machine)
         if context.pending_question:

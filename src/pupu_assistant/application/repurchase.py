@@ -210,6 +210,11 @@ class RepurchaseWorkflow:
                 "understanding": understanding,
                 "product_candidates": tuple(candidates),
                 "repurchase_plan": plan,
+                "selection_reasons": {
+                    line.current_product.product_id: line.reason
+                    for line in lines
+                    if line.current_product is not None
+                },
             }
         )
         machine = replace(snapshot.state_machine)

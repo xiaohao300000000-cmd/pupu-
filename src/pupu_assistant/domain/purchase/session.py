@@ -33,6 +33,7 @@ class PurchaseSessionContext(BaseModel):
     recipe_adjustment: RecipeInventoryAdjustment | None = None
     local_response: str | None = None
     repurchase_plan: RepurchasePlan | None = None
+    selection_reasons: dict[str, str] = Field(default_factory=dict)
 
 
 class PurchaseSessionSnapshot(BaseModel):

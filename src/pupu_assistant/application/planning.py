@@ -135,7 +135,9 @@ class PurchasePlanningWorkflow:
         result = await agent.run(
             "Choose only from these Connector-verified candidates and add the best "
             "match for every requirement to the assistant cart. Do not write the "
-            f"platform cart. Candidates: {candidates}",
+            "platform cart. Include a concise selection_reason based only on the "
+            "provided candidate facts and user constraints. "
+            f"Candidates: {candidates}",
             allowed_tools=machine.allowed_tools(),
         )
         snapshot = self._sessions.load(task_id=task_id, user_id=user_id)

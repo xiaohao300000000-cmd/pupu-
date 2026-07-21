@@ -211,7 +211,11 @@ def _cart_card_item(
         historical_unit_price=(
             repurchase_line.purchased_unit_price if repurchase_line else None
         ),
-        recommendation_reason=repurchase_line.reason if repurchase_line else None,
+        recommendation_reason=(
+            repurchase_line.reason
+            if repurchase_line
+            else snapshot.context.selection_reasons.get(item.product.product_id)
+        ),
     )
 
 

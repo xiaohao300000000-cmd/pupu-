@@ -199,12 +199,21 @@ class _CartRevisionTools:
             raise CartRevisionCandidateRejected(
                 "replacement must be an in-stock saved candidate for the same requirement"
             )
-        return self._sessions.replace_product(
+        updated = self._sessions.replace_product(
             task_id=self._task_id,
             user_id=self._user_id,
             product_id=arguments.product_id,
             replacement=replacement,
             operation_id=self._operation_id("replace"),
+        )
+        reasons = dict(updated.context.selection_reasons)
+        reasons.pop(arguments.product_id, None)
+        reasons[replacement.product_id] = "用户要求从已保存候选中替换"
+        context = updated.context.model_copy(update={"selection_reasons": reasons})
+        return self._sessions.update_context(
+            task_id=self._task_id,
+            user_id=self._user_id,
+            context=context,
         ).cart
 
     def _undo(self, arguments: EmptyCartRevisionArguments):

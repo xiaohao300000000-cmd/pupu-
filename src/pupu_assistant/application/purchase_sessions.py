@@ -203,7 +203,15 @@ class PurchaseSessionService:
         )
         machine = self._copy_machine(snapshot.state_machine)
         machine.cart_changed(version=restored.version)
-        context = snapshot.context.model_copy(update={"previous_cart": None})
+        reasons = dict(snapshot.context.selection_reasons)
+        for item in restored.items:
+            reasons.setdefault(item.product.product_id, "撤销后恢复的商品")
+        context = snapshot.context.model_copy(
+            update={
+                "previous_cart": None,
+                "selection_reasons": reasons,
+            }
+        )
         updated = snapshot.model_copy(
             update={
                 "cart": restored,
