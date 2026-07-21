@@ -46,6 +46,10 @@ class PurchaseSessionNotFound(PurchaseSessionRepositoryError):
     pass
 
 
+class PurchaseSessionAlreadyExists(PurchaseSessionRepositoryError):
+    pass
+
+
 class PurchaseSessionOwnershipConflict(PurchaseSessionRepositoryError):
     pass
 
@@ -127,9 +131,24 @@ class SqlAlchemyPurchaseSessionRepository:
             cursor.close()
 
     def save(self, snapshot: PurchaseSessionSnapshot) -> None:
+        self._write(snapshot, create_only=False)
+
+    def create(self, snapshot: PurchaseSessionSnapshot) -> None:
+        self._write(snapshot, create_only=True)
+
+    def _write(
+        self,
+        snapshot: PurchaseSessionSnapshot,
+        *,
+        create_only: bool,
+    ) -> None:
         now = datetime.now(UTC)
         with self._session_factory.begin() as session:
             record = session.get(PurchaseSessionRecord, snapshot.task_id)
+            if record is not None and create_only:
+                raise PurchaseSessionAlreadyExists(
+                    f"Purchase session already exists: {snapshot.task_id}"
+                )
             if record is not None and record.user_id != snapshot.user_id:
                 raise PurchaseSessionOwnershipConflict(
                     f"Purchase session ownership conflict: {snapshot.task_id}"

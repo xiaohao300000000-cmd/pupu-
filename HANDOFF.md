@@ -24,6 +24,7 @@
 12. `seal/sign` 静态跟进：确认 Hermes `encryptionToParams` 只是业务参数 MD5 摘要；`withSecSign` 会透传到 native request config；payload 中存在 `HEADER_SEAL/HEADER_SIGN`、`seal-v2/v3`、`sign-v2/v3`、`pp-seqid/pp-time` 等线索，但仍缺完整算法和固定向量。
 13. SQLite 采购会话持久化：按 `task_id + user_id` 保存短期上下文、采购状态机、版本化助手购物车、商品明细和操作幂等 ID；保存使用单事务替换，避免旧商品残留。
 14. 稳定 `PupuConnector` 商品边界与任务级工具绑定：读取当前门店、搜索、商品详情和助手购物车增删改替换均通过显式接口；Connector 返回商品会复核门店和 `store_product_id`，不允许模型制造商品事实。
+15. 可恢复的 DeepSeek 需求理解阶段：平台无关采购需求、单问题澄清、澄清答案历史及原任务恢复；直接采购意图必须提交需求或澄清问题。
 
 ## 真实验证边界
 
@@ -34,6 +35,7 @@
 | 助手购物车/状态机/确认存储 | 单元测试通过；Windows 文件锁已改为跨平台实现 |
 | SQLite 任务/购物车恢复 | 代码已实现；本轮遵照用户指令未运行新增测试，不能标记为已验证 |
 | Connector 商品工具绑定 | 代码已实现；没有真实受保护 Connector，且本轮未测试，不能标记为真实商品查询通过 |
+| 需求结构化与澄清恢复 | 代码已实现；本轮未测试，也未使用真实 DeepSeek API Key |
 | APK 元数据 | 6.4.9 与 6.4.1 已核验，同一证书、v1/v2/v3 |
 | 受保护 `seal/sign` | 未得到完整实现，仍 fail-closed |
 | 真实认证请求 | 未验证 |

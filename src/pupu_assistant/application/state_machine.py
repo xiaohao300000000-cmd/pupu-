@@ -64,6 +64,12 @@ class PurchaseStateMachine:
             from_states={PurchaseState.UNDERSTANDING},
         )
 
+    def resume_understanding(self) -> None:
+        self._transition(
+            PurchaseState.UNDERSTANDING,
+            from_states={PurchaseState.AWAITING_CLARIFICATION},
+        )
+
     def gather_context(self) -> None:
         self._transition(
             PurchaseState.GATHERING_CONTEXT,

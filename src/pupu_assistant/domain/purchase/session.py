@@ -6,6 +6,10 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pupu_assistant.application.state_machine import PurchaseStateMachine
 from pupu_assistant.domain.assistant_cart.service import AssistantCart
+from pupu_assistant.domain.purchase.requirements import (
+    ClarificationExchange,
+    PurchaseUnderstanding,
+)
 
 
 class PurchaseSessionContext(BaseModel):
@@ -19,6 +23,8 @@ class PurchaseSessionContext(BaseModel):
     servings: int | None = Field(default=None, ge=1)
     budget: Decimal | None = Field(default=None, ge=0)
     last_card_action_id: str | None = None
+    understanding: PurchaseUnderstanding | None = None
+    clarification_history: tuple[ClarificationExchange, ...] = ()
 
 
 class PurchaseSessionSnapshot(BaseModel):

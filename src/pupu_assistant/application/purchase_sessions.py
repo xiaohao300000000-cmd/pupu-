@@ -13,6 +13,8 @@ from pupu_assistant.domain.purchase.session import (
 
 
 class PurchaseSessionRepository(Protocol):
+    def create(self, snapshot: PurchaseSessionSnapshot) -> None: ...
+
     def save(self, snapshot: PurchaseSessionSnapshot) -> None: ...
 
     def load(self, *, task_id: str, user_id: str) -> PurchaseSessionSnapshot: ...
@@ -46,7 +48,7 @@ class PurchaseSessionService:
             state_machine=PurchaseStateMachine(),
             cart=None,
         )
-        self._repository.save(snapshot)
+        self._repository.create(snapshot)
         return snapshot
 
     def load(self, *, task_id: str, user_id: str) -> PurchaseSessionSnapshot:
