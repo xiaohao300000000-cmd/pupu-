@@ -27,6 +27,9 @@ import java.io.File;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -132,6 +135,45 @@ public class PupuMixmasterHarness extends AbstractJni {
                 new StringObject(vm, path),
                 new StringObject(vm, deviceFeed));
         return out == null ? null : out.getValue();
+    }
+
+    private static String hex(byte[] data) {
+        StringBuilder out = new StringBuilder(data.length * 2);
+        for (byte item : data) {
+            int value = item & 0xff;
+            if (value < 16) {
+                out.append('0');
+            }
+            out.append(Integer.toHexString(value));
+        }
+        return out.toString();
+    }
+
+    private static String sha256Hex(byte[] data) throws Exception {
+        return hex(MessageDigest.getInstance("SHA-256").digest(data));
+    }
+
+    private static String signV3(Map<String, String> headers) throws Exception {
+        ArrayList<String> keys = new ArrayList<>(headers.keySet());
+        Collections.sort(keys);
+        StringBuilder canonical = new StringBuilder();
+        for (String key : keys) {
+            String value = headers.get(key);
+            if (value == null) {
+                continue;
+            }
+            String trimmed = value.trim();
+            int byteLength = trimmed.getBytes(StandardCharsets.UTF_8).length;
+            canonical.append(key.length())
+                    .append(':')
+                    .append(key)
+                    .append('=')
+                    .append(byteLength)
+                    .append(':')
+                    .append(trimmed)
+                    .append('\n');
+        }
+        return sha256Hex(canonical.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     private DvmObject<?> contextObject() {
@@ -263,6 +305,53 @@ public class PupuMixmasterHarness extends AbstractJni {
         return "{}";
     }
 
+    private static String headerValue(Map<String, String> headers, String name) {
+        String direct = headers.get(name);
+        if (direct != null) {
+            return direct;
+        }
+        String lower = name.toLowerCase();
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().toLowerCase().equals(lower)) {
+                return entry.getValue();
+            }
+        }
+        return null;
+    }
+
+    private static void putHeaderIfPresent(
+            Map<String, String> source,
+            Map<String, String> target,
+            String outputName,
+            String... sourceNames) {
+        for (String sourceName : sourceNames) {
+            String value = headerValue(source, sourceName);
+            if (value != null) {
+                target.put(outputName, value);
+                return;
+            }
+        }
+    }
+
+    private static Map<String, String> signV3HeaderMap(Map<String, String> headers) {
+        Map<String, String> out = new LinkedHashMap<>();
+        putHeaderIfPresent(headers, out, "timestamp", "timestamp", "pp-time");
+        putHeaderIfPresent(headers, out, "pp-suid", "pp-suid");
+        putHeaderIfPresent(headers, out, "pp-version", "pp-version");
+        putHeaderIfPresent(headers, out, "pp-page-name", "pp-page-name");
+        putHeaderIfPresent(headers, out, "user-agent", "user-agent");
+        putHeaderIfPresent(headers, out, "pp-userid", "pp-userid", "pp-user-id");
+        putHeaderIfPresent(headers, out, "pp_storeid", "pp_storeid", "pp-storeid", "pp-store-id");
+        putHeaderIfPresent(headers, out, "pp-placezip", "pp-placezip", "pp-place-zip");
+        putHeaderIfPresent(headers, out, "pp-os", "pp-os");
+        putHeaderIfPresent(headers, out, "pp_store_city_zip", "pp_store_city_zip", "pp-store-city-zip");
+        putHeaderIfPresent(headers, out, "pp-placeid", "pp-placeid", "pp-place-id");
+        putHeaderIfPresent(headers, out, "pp-ru-version", "pp-ru-version");
+        putHeaderIfPresent(headers, out, "pp-seqid", "pp-seqid");
+        putHeaderIfPresent(headers, out, "pp-nu-version", "pp-nu-version");
+        return out;
+    }
+
     private static void runSignerMode(String[] args) throws Exception {
         if (args.length < 3) {
             throw new IllegalArgumentException("Usage: PupuMixmasterHarness --signer <libmixmaster.so> <input-json-file>");
@@ -281,12 +370,21 @@ public class PupuMixmasterHarness extends AbstractJni {
         PupuMixmasterHarness harness = new PupuMixmasterHarness(lib, false);
         try {
             harness.thrust();
-            String seal = harness.swindle(headers, path, deviceFeed(request));
+            Map<String, String> signHeaders = signV3HeaderMap(headers);
+            String sign = signV3(signHeaders);
+            Map<String, String> sealHeaders = new LinkedHashMap<>();
+            sealHeaders.put("timestamp", signHeaders.getOrDefault("timestamp", ""));
+            sealHeaders.put("sign-v3", sign);
+            String seal = harness.swindle(sealHeaders, path, deviceFeed(request));
             if (seal == null || seal.isEmpty()) {
                 result.put("ok", false);
                 result.put("error", "mixmaster_swindle_empty");
             } else {
                 JSONObject signedHeaders = new JSONObject(true);
+                if (signHeaders.containsKey("timestamp")) {
+                    signedHeaders.put("timestamp", signHeaders.get("timestamp"));
+                }
+                signedHeaders.put("sign-v3", sign);
                 signedHeaders.put("seal-v3", seal);
                 if (headers.containsKey("pp-time")) {
                     signedHeaders.put("pp-time", headers.get("pp-time"));
@@ -295,6 +393,7 @@ public class PupuMixmasterHarness extends AbstractJni {
                 metadata.put("source", "unidbg_mixmaster");
                 metadata.put("path", path);
                 metadata.put("native", "libmixmaster.so");
+                metadata.put("sign-v3", "sha256_canonical_headers");
                 result.put("signed_headers", signedHeaders);
                 result.put("metadata", metadata);
             }

@@ -12,6 +12,7 @@ Verified facts:
 - `swindle` reads the complete header map via `entrySet/iterator/hasNext/next/getKey/getValue`.
 - `swindle` reads the request path and device-feed string.
 - With synthetic header/path/feed input, `swindle` returns a JSON-shaped value with `s0/s1/s2/s3`; the main payload is in `s2`.
+- The reusable signer mode now computes `sign-v3` from the same canonical header format recovered from `com.pupumall.customer.tinystack.z` and passes only `timestamp + sign-v3` into `Vortex.swindle(...)`, matching the recovered `MNetSecurityUtil` request boundary.
 
 No real account, token, SMS code, captured request header, or real production seal/sign value is stored or committed.
 
@@ -20,6 +21,7 @@ No real account, token, SMS code, captured request header, or real production se
 - `scripts/unidbg/PupuMixmasterHarness.java`
   - Copy this into a private unidbg checkout under `unidbg-android/src/test/java/com/pupu/harness/`.
   - Includes minimal Android/JNI stubs for `libandroid.so` sensor/looper calls, `libmediandk.so` DRM calls, `ActivityThread.currentApplication()`, `Application.getFilesDir()`, and Java map iteration.
+  - In `--signer` mode, reads stdin JSON through the runner, derives `sign-v3`, calls native `swindle`, and emits `signed_headers.sign-v3` plus `signed_headers.seal-v3`.
 - `scripts/run_pupu_mixmaster_harness.ps1`
   - Copies the harness into the private unidbg checkout and runs it.
 
@@ -63,13 +65,12 @@ The runner script sets this automatically.
 
 ## Remaining gap to the main goal
 
-The gap has narrowed from "native code cannot run locally" to "wire real request context into a serviceable signer backend":
+The gap has narrowed from "native code cannot run locally" to "validate service acceptance with authorized live request context":
 
-1. Change the harness from synthetic headers to stdin JSON input.
-2. Validate with redacted/authorized vectors whether `s2` is directly the desired `seal-v3` payload or whether Java-side wrapping is still needed.
-3. Continue Android environment stubs in `thrust`; current next missing call is `Context.getContentResolver()`.
-4. Package the `libmixmaster` runner as a `.local/bin/pupusgn` backend.
-5. Handle `libwindcharger.so` / `Gears` legacy `seal/sign-v2` separately; it still looks more packed/self-decrypting and is better handled with dynamic dump first.
+1. Validate with redacted/authorized vectors whether `seal-v3` should be sent as the full `s0/s1/s2/s3` JSON string or extracted `s2`.
+2. Confirm which caller path always provides `timestamp` versus older local fixtures that used `pp-time`; signer mode accepts either and emits `timestamp`.
+3. Continue Android environment stubs in `thrust` only if stricter device context is required by live validation.
+4. Handle `libwindcharger.so` / `Gears` legacy `seal/sign-v2` separately; it still looks more packed/self-decrypting and is better handled with dynamic dump first.
 
 ## Hygiene
 

@@ -340,6 +340,7 @@ print(json.dumps({
             "{\\\"s0\\\":\\\"\\\",\\\"s1\\\":\\\"\\\","
             "\\\"s2\\\":\\\"<MIXMASTER_S2>\\\",\\\"s3\\\":\\\"\\\"}"
         ),
+        "sign-v3": "<MIXMASTER_SIGN_V3>",
         "pp-time": request["headers"].get("pp-time", "<TIMESTAMP_MS>"),
     },
     "metadata": {"source": "fake_mixmaster", "path": request["path"]},
@@ -370,6 +371,7 @@ def test_pupusgn_cli_accepts_mixmaster_command(tmp_path: Path) -> None:
     assert output["ok"] is True
     assert output["network_performed"] is False
     assert output["headers"]["seal-v3"].startswith('{"s0"')
+    assert output["headers"]["sign-v3"] == "<MIXMASTER_SIGN_V3>"
     assert output["metadata"]["source"] == "fake_mixmaster"
     assert invoked["method"] == request["method"]
     assert invoked["path"] == request["path"]
