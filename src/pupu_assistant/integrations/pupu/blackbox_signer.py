@@ -8,11 +8,16 @@ import shlex
 import subprocess
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pupu_assistant.integrations.pupu.models import SignatureMode
+from pupu_assistant.integrations.pupu.models import (
+    PupuRequestContext,
+    SignatureMode,
+    SignedPupuRequest,
+)
 
 SIGNATURE_HEADER_NAMES = frozenset(
     {
@@ -357,6 +362,101 @@ def sign_input(
         return sign_with_signature_cache(request, cache_path)
 
     raise BlackboxSignatureUnavailable("blackbox signature unavailable")
+
+
+def _request_context_body(request: PupuRequestContext) -> str | None:
+    if request.body is None:
+        return None
+    return request.body.decode("utf-8")
+
+
+def _request_context_headers(request: PupuRequestContext) -> dict[str, str]:
+    headers = {str(name).lower(): str(value) for name, value in request.existing_headers.items()}
+    headers.setdefault("accept", "application/json")
+    headers.setdefault("content-type", "application/json;charset=utf-8")
+    headers.setdefault("timestamp", str(request.timestamp_ms))
+    headers.setdefault("pp-time", str(request.timestamp_ms))
+    headers.setdefault("pp-version", request.app_version)
+    headers.setdefault("pp-os", request.os_type)
+    if request.device_id:
+        headers.setdefault("pp-deviceid", request.device_id)
+    if request.user_id:
+        headers.setdefault("pp-userid", request.user_id)
+    if request.su_id:
+        headers.setdefault("pp-suid", request.su_id)
+    if request.store_id:
+        headers.setdefault("pp_storeid", request.store_id)
+    if request.place_id:
+        headers.setdefault("pp-placeid", request.place_id)
+    if request.city_zip:
+        headers.setdefault("pp-placezip", request.city_zip)
+        headers.setdefault("pp_store_city_zip", request.city_zip)
+    headers.setdefault("user-agent", f"pupu-android/{request.app_version}")
+    return headers
+
+
+def _seal_v3_s2(value: str) -> str:
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise BlackboxSignatureUnavailable("seal-v3 is not JSON and cannot extract s2") from error
+    if not isinstance(parsed, Mapping) or not isinstance(parsed.get("s2"), str):
+        raise BlackboxSignatureUnavailable("seal-v3 JSON does not contain string s2")
+    return parsed["s2"]
+
+
+@dataclass(frozen=True, slots=True)
+class BlackboxPupuSignatureService:
+    """PupuSignatureService adapter backed by pupusgn-compatible local signer output."""
+
+    provider_command: str | None = None
+    sdu_command: str | None = None
+    signature_cache: str | None = None
+    mixmaster_command: str | None = None
+    seal_v3_mode: str = "full"
+
+    def sign(self, request: PupuRequestContext) -> SignedPupuRequest:
+        body = _request_context_body(request)
+        signing_request: dict[str, Any] = {
+            "method": request.method,
+            "path": request.path,
+            "query": [[key, value] for key, value in request.query],
+            "headers": _request_context_headers(request),
+            "context": {
+                "app_version": request.app_version,
+                "os_type": request.os_type,
+                "pp_device_id": request.device_id,
+                "user_id": request.user_id,
+                "su_id": request.su_id,
+                "store_id": request.store_id,
+                "place_id": request.place_id,
+                "city_zip": request.city_zip,
+            },
+        }
+        if body is not None:
+            signing_request["body"] = body
+
+        signed = sign_input(
+            {"request": signing_request},
+            provider_command=self.provider_command,
+            sdu_command=self.sdu_command,
+            signature_cache=self.signature_cache,
+            mixmaster_command=self.mixmaster_command,
+        )
+        headers = dict(signed["headers"])
+        if self.seal_v3_mode == "s2" and isinstance(headers.get("seal-v3"), str):
+            headers["seal-v3"] = _seal_v3_s2(headers["seal-v3"])
+        elif self.seal_v3_mode != "full":
+            raise ValueError("seal_v3_mode must be 'full' or 's2'")
+
+        return SignedPupuRequest(
+            path=request.path,
+            query=request.query,
+            body=request.body,
+            headers=headers,
+            signature_mode=SignatureMode.SEAL_SIGN,
+            metadata={str(k): str(v) for k, v in dict(signed.get("metadata") or {}).items()},
+        )
 
 
 def _error_payload(message: str, code: str = "blackbox_signature_unavailable") -> dict[str, Any]:

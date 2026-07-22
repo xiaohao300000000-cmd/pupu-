@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "description": "Copy to .local/private/pupu-live-request.json and replace placeholders locally. Do not commit the private copy.",
+  "base_url": "https://j1.pupuapi.com",
+  "app_version": "6.4.9",
+  "os_type": "20",
+  "mixmaster_command": "powershell -ExecutionPolicy Bypass -File scripts/run_pupu_mixmaster_harness.ps1 -SignerMode -LibMixmaster .local/private/pupu-6.4.9-apktool-x86shim/lib/arm64-v8a/libmixmaster.so",
+  "context": {
+    "pp_device_id": "<PP_DEVICE_ID>",
+    "user_id": "<USER_ID>",
+    "su_id": "<SUID>",
+    "store_id": "<STORE_ID>",
+    "place_id": "<PLACE_ID>",
+    "city_zip": "<CITY_ZIP>"
+  },
+  "request": {
+    "method": "GET",
+    "path": "/client/product/storeproduct/detail_popup/<STORE_ID>/<STORE_PRODUCT_ID>",
+    "query": [
+      ["zip", "<CITY_ZIP>"],
+      ["store_id", "<STORE_ID>"]
+    ],
+    "headers": {
+      "accept": "application/json",
+      "pp-version": "6.4.9",
+      "pp-os": "20",
+      "pp-deviceid": "<PP_DEVICE_ID>",
+      "pp-userid": "<USER_ID>",
+      "pp-suid": "<SUID>",
+      "pp_storeid": "<STORE_ID>",
+      "pp-placeid": "<PLACE_ID>",
+      "pp-placezip": "<CITY_ZIP>",
+      "user-agent": "pupu-android/6.4.9"
+    }
+  }
+}

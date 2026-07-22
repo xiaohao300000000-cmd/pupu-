@@ -7,12 +7,14 @@ from pathlib import Path
 import pytest
 
 from pupu_assistant.integrations.pupu.blackbox_signer import (
+    BlackboxPupuSignatureService,
     BlackboxSignatureUnavailable,
     build_blackbox_signing_payload,
     request_fingerprint,
     sign_with_signature_cache,
     sign_with_supplied_result,
 )
+from pupu_assistant.integrations.pupu.models import PupuRequestContext
 
 
 def minimal_payload() -> dict[str, object]:
@@ -376,6 +378,52 @@ def test_pupusgn_cli_accepts_mixmaster_command(tmp_path: Path) -> None:
     assert invoked["method"] == request["method"]
     assert invoked["path"] == request["path"]
     assert invoked["headers"]["pp-deviceid"] == "<PP_DEVICE_ID>"
+
+
+def test_blackbox_pupu_signature_service_can_extract_s2(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_sign_input(data: dict[str, object], **_: object) -> dict[str, object]:
+        captured.update(data)
+        return {
+            "ok": True,
+            "network_performed": False,
+            "headers": {
+                "seal-v3": '{"s0":"","s1":"","s2":"<REAL_S2>","s3":""}',
+                "sign-v3": "<REAL_SIGN_V3>",
+            },
+            "metadata": {"source": "fake"},
+        }
+
+    monkeypatch.setattr(
+        "pupu_assistant.integrations.pupu.blackbox_signer.sign_input",
+        fake_sign_input,
+    )
+    service = BlackboxPupuSignatureService(seal_v3_mode="s2")
+    request = product_sdu_request()
+    signed = service.sign(
+        PupuRequestContext(
+            method=str(request["method"]),
+            path=str(request["path"]),
+            query=tuple((str(key), str(value)) for key, value in request["query"]),
+            body=None,
+            timestamp_ms=1_753_036_200_000,
+            device_id="<PP_DEVICE_ID>",
+            user_id="<USER_ID>",
+            su_id="<SUID>",
+            store_id="<STORE_ID>",
+            place_id="<PLACE_ID>",
+            city_zip="<CITY_ZIP>",
+            app_version="6.4.9",
+            os_type="20",
+            existing_headers=dict(request["headers"]),
+        )
+    )
+
+    assert signed.headers["seal-v3"] == "<REAL_S2>"
+    assert signed.headers["sign-v3"] == "<REAL_SIGN_V3>"
+    assert captured["request"]["headers"]["timestamp"] == "1753036200000"
+    assert captured["request"]["headers"]["pp_storeid"] == "<STORE_ID>"
 
 
 def write_fake_sdu_signer(tmp_path: Path) -> tuple[Path, Path]:

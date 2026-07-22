@@ -12,6 +12,7 @@ __pycache__/
 !.local/pupusgn-sdu-input.json
 !.local/pupusgn-signature-cache.example.json
 !.local/pupu-cases.json
+!.local/pupu-live-request.example.json
 .tools/
 *.apk
 *.xapk

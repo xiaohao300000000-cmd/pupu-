@@ -24,6 +24,10 @@ No real account, token, SMS code, captured request header, or real production se
   - In `--signer` mode, reads stdin JSON through the runner, derives `sign-v3`, calls native `swindle`, and emits `signed_headers.sign-v3` plus `signed_headers.seal-v3`.
 - `scripts/run_pupu_mixmaster_harness.ps1`
   - Copies the harness into the private unidbg checkout and runs it.
+- `scripts/validate_pupu_protected.py`
+  - Reads `.local/private/pupu-live-request.json` (private, not committed), tries `seal-v3` in `full` and `s2` modes, runs one protected request, and writes redacted evidence to `.local/evidence/protected-live-validation.json`.
+- `.local/pupu-live-request.example.json`
+  - Commit-safe template for the private live request file. Replace placeholders locally only.
 
 Default local command:
 
@@ -67,7 +71,7 @@ The runner script sets this automatically.
 
 The gap has narrowed from "native code cannot run locally" to "validate service acceptance with authorized live request context":
 
-1. Validate with redacted/authorized vectors whether `seal-v3` should be sent as the full `s0/s1/s2/s3` JSON string or extracted `s2`.
+1. Run `scripts/validate_pupu_protected.py` with an authorized private request file and confirm whether `full` or `s2` is the accepted `seal-v3` format.
 2. Confirm which caller path always provides `timestamp` versus older local fixtures that used `pp-time`; signer mode accepts either and emits `timestamp`.
 3. Continue Android environment stubs in `thrust` only if stricter device context is required by live validation.
 4. Handle `libwindcharger.so` / `Gears` legacy `seal/sign-v2` separately; it still looks more packed/self-decrypting and is better handled with dynamic dump first.
